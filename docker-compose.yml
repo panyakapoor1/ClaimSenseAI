@@ -1,0 +1,43 @@
+﻿version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: claimsense_postgres
+    environment:
+      POSTGRES_USER: claimsense
+      POSTGRES_PASSWORD: securepassword
+      POSTGRES_DB: claimsensedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: claimsense_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  fastapi:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: claimsense_fastapi
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://claimsense:securepassword@postgres:5432/claimsensedb
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:
