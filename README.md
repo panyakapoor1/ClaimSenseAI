@@ -1,4 +1,4 @@
-﻿# ClaimSense AI
+# ClaimSense AI
 
 A Multi-Agent RAG-Based Explainable Insurance Claim Auditor for Indian Healthcare Claims.
 
@@ -111,7 +111,68 @@ The API will be available at http://localhost:8000. You can view the interactive
 | GROQ_API_KEY | API key for Llama-3 inference. |
 
 ## Database Schema
-*(Coming Soon - Phase 2)*
+The application uses PostgreSQL as its primary datastore, leveraging the `pgvector` extension to fuse relational data with AI embeddings.
+
+```mermaid
+erDiagram
+    USERS ||--o{ POLICIES : owns
+    USERS ||--o{ CLAIMS : submits
+    POLICIES ||--o{ POLICY_CHUNKS : contains
+    CLAIMS ||--o{ CLAIM_ITEMS : has
+    CLAIM_ITEMS ||--o| AUDIT_FINDINGS : results_in
+
+    USERS {
+        uuid id PK
+        string email
+        datetime created_at
+    }
+    
+    POLICIES {
+        uuid id PK
+        uuid user_id FK
+        string insurer_name
+        string policy_name
+        datetime created_at
+    }
+    
+    POLICY_CHUNKS {
+        uuid id PK
+        uuid policy_id FK
+        string page_number
+        string section_header
+        text text_content
+        vector embedding
+    }
+    
+    CLAIMS {
+        uuid id PK
+        uuid user_id FK
+        float total_billed
+        string status
+        datetime created_at
+    }
+    
+    CLAIM_ITEMS {
+        uuid id PK
+        uuid claim_id FK
+        string category
+        string description
+        float billed_amount
+        float allowed_amount
+    }
+    
+    AUDIT_FINDINGS {
+        uuid id PK
+        uuid claim_item_id FK
+        string status
+        string reason
+        string policy_clause_cited
+        string original_clause_text
+        string page_number
+        float confidence
+        datetime created_at
+    }
+```
 
 ## API Documentation
 *(Coming Soon)*
