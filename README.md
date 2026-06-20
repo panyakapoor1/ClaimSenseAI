@@ -21,7 +21,24 @@ Most patients cannot read through a dense 50+ page policy document or verify whe
 
 ## Architecture Diagram
 
-*(Coming Soon - Phase 4)*
+The system employs an event-driven, asynchronous microservice architecture to decouple web requests from heavy AI workloads.
+
+```mermaid
+graph TD
+    Client[Next.js Client] -->|REST / WebSockets| API(FastAPI Server)
+    API -->|Synchronous CRUD| DB[(PostgreSQL + pgvector)]
+    API -->|Enqueue Task| Redis[(Redis Broker)]
+    
+    subgraph Background Workers
+        Worker[ARQ Worker Process]
+    end
+    
+    Redis -->|Dequeue Task| Worker
+    Worker -->|Fetch Data| DB
+    Worker -->|Write Results| DB
+    Worker -.->|API Calls| LLM((Groq Llama-3))
+    Worker -.->|OCR/Embeddings| LocalAI((Local Models))
+```
 
 ## System Design
 
