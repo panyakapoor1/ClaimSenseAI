@@ -192,10 +192,19 @@ erDiagram
 ```
 
 ## API Documentation
-*(Coming Soon)*
+
+### 1. Upload Hospital Bill
+- **Endpoint:** `POST /upload-bill/`
+- **Description:** Uploads a PDF hospital bill, creates a `PENDING` claim in the PostgreSQL database, and enqueues an asynchronous extraction task.
+- **Parameters:** `file` (multipart/form-data)
+- **Response:** `{"status": "processing", "claim_id": "<uuid>", "job_id": "<uuid>"}`
 
 ## Agent Architecture
-*(Coming Soon)*
+
+### 1. Bill Extractor Agent
+- **Trigger:** Enqueued upon a successful `POST /upload-bill/` request.
+- **Execution:** Runs in a background ARQ worker. Uses `pdfplumber` to extract raw text, and Groq's Llama-3-70B model to intelligently classify and extract line items into a strict JSON object.
+- **Output:** Populates the `claim_items` PostgreSQL table.
 
 ## RAG Pipeline
 *(Coming Soon)*
