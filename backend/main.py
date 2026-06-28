@@ -91,3 +91,46 @@ async def upload_bill(request: Request, file: UploadFile = File(...)):
         "claim_id": str(claim.id),
         "job_id": job.job_id
     }
+
+@app.post("/upload-policy/")
+async def upload_policy(request: Request, file: UploadFile = File(...), insurer_name: str = "Unknown", policy_name: str = "Unknown"):
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+        
+    os.makedirs("uploads", exist_ok=True)
+    file_path = f"uploads/{uuid.uuid4()}_{file.filename}"
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+        
+    async with AsyncSessionLocal() as session:
+        from models.policy import Policy
+        result = await session.execute(select(User).limit(1))
+        user = result.scalars().first()
+        
+        policy = Policy(
+            user_id=user.id,
+            insurer_name=insurer_name,
+            policy_name=policy_name
+        )
+        session.add(policy)
+        await session.commit()
+        await session.refresh(policy)
+        
+    # Enqueue background ingestion task
+    job = await request.app.state.redis_pool.enqueue_job(
+        "ingest_policy_task",
+        str(policy.id),
+        file_path
+    )
+    
+    return {
+        "status": "processing",
+        "policy_id": str(policy.id),
+        "job_id": job.job_id
+    }
+
+@app.get("/search-policy/{policy_id}")
+async def search_policy(policy_id: str, q: str):
+    from agents.rag_retriever import search_policy_chunks
+    results = await search_policy_chunks(query=q, policy_id=policy_id, top_k=5)
+    return {"query": q, "results": results}

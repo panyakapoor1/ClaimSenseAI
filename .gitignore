@@ -9,3 +9,5 @@ node_modules/
 out/
 .DS_Store
 Thumbs.db
+
+backend/uploads/
