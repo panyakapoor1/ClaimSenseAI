@@ -16,6 +16,7 @@ class Claim(Base):
 
     user = relationship("User", back_populates="claims")
     items = relationship("ClaimItem", back_populates="claim", cascade="all, delete-orphan")
+    appeal = relationship("AppealDocument", back_populates="claim", uselist=False, cascade="all, delete-orphan")
 
 class ClaimItem(Base):
     __tablename__ = "claim_items"
@@ -44,3 +45,13 @@ class AuditFinding(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     item = relationship("ClaimItem", back_populates="audit_finding")
+
+class AppealDocument(Base):
+    __tablename__ = "appeal_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    claim_id = Column(UUID(as_uuid=True), ForeignKey("claims.id", ondelete="CASCADE"), nullable=False, unique=True)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    claim = relationship("Claim", back_populates="appeal")

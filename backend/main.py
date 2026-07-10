@@ -5,7 +5,7 @@ from arq.connections import RedisSettings
 from core.config import settings
 from core.database import AsyncSessionLocal
 from models.user import User
-from models.claim import Claim
+from models.claim import Claim, ClaimItem, AuditFinding
 from sqlalchemy.future import select
 from pydantic import BaseModel
 import os
@@ -134,3 +134,95 @@ async def search_policy(policy_id: str, q: str):
     from agents.rag_retriever import search_policy_chunks
     results = await search_policy_chunks(query=q, policy_id=policy_id, top_k=5)
     return {"query": q, "results": results}
+
+@app.post("/audit-claim/")
+async def audit_claim(request: Request, claim_id: str, policy_id: str):
+    """
+    Enqueues a background task to audit a parsed claim against an ingested policy using RAG + LLM.
+    """
+    job = await request.app.state.redis_pool.enqueue_job("audit_claim_task", claim_id, policy_id)
+    if not job:
+        raise HTTPException(status_code=500, detail="Failed to enqueue audit task")
+    return {"status": "processing", "claim_id": claim_id, "policy_id": policy_id, "job_id": job.job_id}
+
+@app.get("/audit-results/{claim_id}")
+async def get_audit_results(claim_id: str):
+    """
+    Fetches the generated audit findings for a specific claim.
+    """
+    async with AsyncSessionLocal() as session:
+        # Check if claim exists
+        claim = await session.get(Claim, claim_id)
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found")
+
+        # Fetch claim items along with their audit findings
+        result = await session.execute(
+            select(ClaimItem).where(ClaimItem.claim_id == claim_id)
+        )
+        items = result.scalars().all()
+        
+        # We need to manually fetch the findings for these items since we don't have eager loading setup here
+        # or we can query AuditFinding directly
+        findings_result = await session.execute(
+            select(AuditFinding).where(AuditFinding.claim_item_id.in_([item.id for item in items]))
+        )
+        findings = findings_result.scalars().all()
+        
+        # Map findings to items
+        finding_map = {f.claim_item_id: f for f in findings}
+        
+        response_items = []
+        for item in items:
+            finding = finding_map.get(item.id)
+            response_items.append({
+                "item_id": str(item.id),
+                "category": item.category,
+                "description": item.description,
+                "billed_amount": item.billed_amount,
+                "audit": {
+                    "status": finding.status if finding else "PENDING",
+                    "reason": finding.reason if finding else None,
+                    "policy_clause_cited": finding.policy_clause_cited if finding else None,
+                    "original_clause_text": finding.original_clause_text if finding else None,
+                    "page_number": finding.page_number if finding else None,
+                    "confidence": finding.confidence if finding else None
+                } if finding else None
+            })
+
+        return {
+            "claim_id": str(claim.id),
+            "claim_status": claim.status,
+            "total_billed": claim.total_billed,
+            "items": response_items
+        }
+
+@app.post("/generate-appeal/")
+async def generate_appeal(request: Request, claim_id: str):
+    """
+    Enqueues a background task to generate an appeal letter for a claim with rejected items.
+    """
+    job = await request.app.state.redis_pool.enqueue_job("generate_appeal_task", claim_id)
+    if not job:
+        raise HTTPException(status_code=500, detail="Failed to enqueue appeal task")
+    return {"status": "processing", "claim_id": claim_id, "job_id": job.job_id}
+
+@app.get("/appeal/{claim_id}")
+async def get_appeal(claim_id: str):
+    """
+    Fetches the generated appeal letter for a specific claim.
+    """
+    from models.claim import AppealDocument
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(AppealDocument).where(AppealDocument.claim_id == claim_id)
+        )
+        appeal = result.scalars().first()
+        if not appeal:
+            raise HTTPException(status_code=404, detail="Appeal letter not found or not generated yet")
+        
+        return {
+            "claim_id": claim_id,
+            "appeal_text": appeal.content,
+            "created_at": appeal.created_at
+        }
