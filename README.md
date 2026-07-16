@@ -2,30 +2,29 @@
 
 A Multi-Agent RAG-Based Explainable Insurance Claim Auditor for Indian Healthcare Claims.
 
-## Problem Statement
+## 🚀 Problem Statement
 
 In India, health insurance claims are opaque and difficult to understand. Patients frequently face unexpected partial settlements, room-rent deductions, consumable exclusions, and hidden policy limits. 
 
-Most patients cannot read through a dense 50+ page policy document or verify whether their Third Party Administrator (TPA) has unfairly rejected a claim. ClaimSense AI acts as an autonomous, multi-agent advocate that reads hospital bills, correlates them against complex policy documents using RAG, and generates an item-by-item explainable audit report alongside an automated appeal letter.
+Most patients cannot read through a dense 50+ page policy document or verify whether their Third Party Administrator (TPA) has unfairly rejected a claim. **ClaimSense AI** acts as an autonomous, multi-agent advocate that reads hospital bills, correlates them against complex policy documents using RAG, and generates an item-by-item explainable audit report alongside an automated appeal letter.
 
-## Features
+## ✨ Features
 
-* OCR Bill Extraction
-* Policy Parsing
-* RAG Retrieval
-* Multi-Agent Pipeline
-* Claim Auditing
-* Explainable AI
-* Appeal Generation
-* Real-Time Updates
+- **OCR Bill Extraction**: Extracts structured line items from raw hospital PDFs.
+- **Policy Parsing & RAG**: Chunks and embeds dense insurance PDFs into a vector database for semantic search.
+- **Multi-Agent Pipeline**: Specialized AI agents for extraction, auditing, and appeal generation.
+- **Explainable Auditing**: Item-by-item breakdown of approved and rejected claims, citing exact policy clauses and page numbers.
+- **Automated Appeals**: Generates formal markdown appeal letters tailored to the specific rejection reasoning.
+- **Real-Time WebSockets**: Live progress tracking of AI agents streaming directly to the Next.js frontend.
+- **Premium Dashboard**: A sleek, dark-mode glassmorphism UI built with Next.js 15 and Tailwind CSS.
 
-## Architecture Diagram
+## 🏗️ Architecture
 
 The system employs an event-driven, asynchronous microservice architecture to decouple web requests from heavy AI workloads.
 
 ```mermaid
 graph TD
-    Client[Next.js Client] -->|REST / WebSockets| API(FastAPI Server)
+    Client[Next.js Frontend] -->|REST / WebSockets| API(FastAPI Server)
     API -->|Synchronous CRUD| DB[(PostgreSQL + pgvector)]
     API -->|Enqueue Task| Redis[(Redis Broker)]
     
@@ -40,22 +39,13 @@ graph TD
     Worker -.->|OCR/Embeddings| LocalAI((Local Models))
 ```
 
-## System Design
-
-The system utilizes a containerized, asynchronous microservice architecture. 
-
-1. **Frontend:** A Next.js 15 client dashboard.
-2. **API Layer:** FastAPI exposing REST endpoints and WebSockets for real-time progress tracking.
-3. **Async Queue:** Redis and ARQ offload heavy AI tasks (OCR, embedding generation, LLM reasoning) from the main API thread.
-4. **Data Layer:** PostgreSQL stores structured application data (Users, Claims), while the pgvector extension natively stores and queries policy embeddings in the exact same database, eliminating distributed transaction risks.
-
-## Tech Stack
+## 🛠️ Tech Stack
 
 **Frontend**
 * Next.js 15 (App Router)
 * TypeScript
-* Tailwind CSS
-* shadcn/ui
+* Tailwind CSS v4
+* Framer Motion & Lucide Icons
 
 **Backend**
 * FastAPI (Python 3.11)
@@ -63,72 +53,54 @@ The system utilizes a containerized, asynchronous microservice architecture.
 * SQLAlchemy (Asyncpg)
 
 **Database**
-* PostgreSQL
-* pgvector
-* Redis (Message Broker & Cache)
+* PostgreSQL with `pgvector`
+* Redis (Message Broker & Pub/Sub)
 
 **AI Layer**
 * Groq API (Llama-3-70B for fast, free reasoning)
-* local sentence-transformers (Embeddings)
-* pdfplumber (OCR)
+* Local `sentence-transformers` (Embeddings)
+* `pdfplumber` (OCR)
 
-**Infrastructure**
-* Docker & Docker Compose
+## 🤖 Agent Workflow
 
-## Folder Structure
+1. **Bill Extractor Agent**: Uses OCR and LLM reasoning to extract line items from hospital bills and stores them in Postgres.
+2. **Policy Ingestion Agent**: Parses dense insurance PDFs, chunks text semantically, generates vector embeddings, and stores them in `pgvector`.
+3. **Claim Auditor Agent**: For each claim item, performs semantic search against the policy to retrieve relevant clauses. It then uses an LLM to decide whether the item should be APPROVED or REJECTED, citing the specific policy text and page number.
+4. **Appeal Generator Agent**: Gathers all rejected items and their corresponding policy clauses, then drafts a formal appeal letter advocating for the patient.
 
-`	ext
-ClaimSenseAI/
-├── backend/
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   ├── .env.example
-│   └── .dockerignore
-├── docker-compose.yml
-├── .gitignore
-└── README.md
-`
+## 💻 Local Development Setup
 
-## Local Development Setup
-
-ClaimSense AI uses Docker Compose to guarantee environmental consistency. 
+ClaimSense AI uses Docker Compose to guarantee environmental consistency.
 
 ### Prerequisites
 * Docker Desktop installed and running.
 * Git.
 
 ### 1. Clone the repository
-`ash
+```bash
 git clone https://github.com/panyakapoor1/ClaimSenseAI.git
 cd ClaimSenseAI
-`
+```
 
 ### 2. Configure Environment Variables
 Copy the example environment file:
-`ash
+```bash
 cp backend/.env.example backend/.env
-`
-*(Add your Groq API key to the .env file).*
+```
+*(Add your `GROQ_API_KEY` to the `.env` file).*
 
 ### 3. Start the Infrastructure
-Build and start the PostgreSQL, Redis, and FastAPI containers:
-`ash
-docker compose up -d --build
-`
+Build and start the PostgreSQL, Redis, FastAPI backend, ARQ worker, and Next.js frontend containers:
+```bash
+docker-compose up -d --build
+```
 
-The API will be available at http://localhost:8000. You can view the interactive Swagger documentation at http://localhost:8000/docs.
+### 4. Access the Application
+- **Frontend Dashboard:** http://localhost:3000
+- **FastAPI Swagger Docs:** http://localhost:8000/docs
+- **PgAdmin (if configured):** Available on mapped ports.
 
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| DATABASE_URL | The async connection string to the PostgreSQL database. |
-| REDIS_URL | The connection string for the ARQ queue broker. |
-| GROQ_API_KEY | API key for Llama-3 inference. |
-
-## Database Schema
-The application uses PostgreSQL as its primary datastore, leveraging the `pgvector` extension to fuse relational data with AI embeddings.
+## 🗄️ Database Schema
 
 ```mermaid
 erDiagram
@@ -149,14 +121,11 @@ erDiagram
         uuid user_id FK
         string insurer_name
         string policy_name
-        datetime created_at
     }
     
     POLICY_CHUNKS {
         uuid id PK
         uuid policy_id FK
-        string page_number
-        string section_header
         text text_content
         vector embedding
     }
@@ -184,36 +153,16 @@ erDiagram
         string status
         string reason
         string policy_clause_cited
-        string original_clause_text
         string page_number
         float confidence
         datetime created_at
     }
 ```
 
-## API Documentation
+## 🔮 Future Roadmap
+- Integration with Indian Health Data Stack (ABDM).
+- Support for regional languages (Hindi, Marathi, etc.) using Indic LLMs.
+- Direct TPA integration for automated claim submission.
 
-### 1. Upload Hospital Bill
-- **Endpoint:** `POST /upload-bill/`
-- **Description:** Uploads a PDF hospital bill, creates a `PENDING` claim in the PostgreSQL database, and enqueues an asynchronous extraction task.
-- **Parameters:** `file` (multipart/form-data)
-- **Response:** `{"status": "processing", "claim_id": "<uuid>", "job_id": "<uuid>"}`
-
-## Agent Architecture
-
-### 1. Bill Extractor Agent
-- **Trigger:** Enqueued upon a successful `POST /upload-bill/` request.
-- **Execution:** Runs in a background ARQ worker. Uses `pdfplumber` to extract raw text, and Groq's Llama-3-70B model to intelligently classify and extract line items into a strict JSON object.
-- **Output:** Populates the `claim_items` PostgreSQL table.
-
-## RAG Pipeline
-*(Coming Soon)*
-
-## Screenshots
-*(Coming Soon)*
-
-## Performance Metrics
-*(Coming Soon)*
-
-## Future Roadmap
-*(Coming Soon)*
+---
+*Built with ❤️ for a transparent healthcare system.*
