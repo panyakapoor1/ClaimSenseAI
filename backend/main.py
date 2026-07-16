@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from arq import create_pool
 from arq.connections import RedisSettings
@@ -8,8 +9,10 @@ from models.user import User
 from models.claim import Claim, ClaimItem, AuditFinding
 from sqlalchemy.future import select
 from pydantic import BaseModel
+import redis.asyncio as aioredis
 import os
 import uuid
+import json
 
 class TaskRequest(BaseModel):
     task_name: str
@@ -19,6 +22,8 @@ class TaskRequest(BaseModel):
 async def lifespan(app: FastAPI):
     print("ClaimSense AI Backend Starting...")
     app.state.redis_pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    # Separate raw redis connection for Pub/Sub
+    app.state.redis_pubsub = aioredis.from_url(settings.redis_url, decode_responses=True)
     
     # Seed a dummy user for testing if one doesn't exist
     async with AsyncSessionLocal() as session:
@@ -32,6 +37,7 @@ async def lifespan(app: FastAPI):
             
     yield
     print("ClaimSense AI Backend Shutting Down...")
+    await app.state.redis_pubsub.close()
     app.state.redis_pool.close()
     await app.state.redis_pool.wait_closed()
 
@@ -40,6 +46,15 @@ app = FastAPI(
     description="Multi-Agent RAG-Based Insurance Claim Auditor",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# CORS middleware for Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/")
@@ -197,6 +212,26 @@ async def get_audit_results(claim_id: str):
             "items": response_items
         }
 
+@app.get("/claims/")
+async def list_claims():
+    """
+    Lists all claims in the system.
+    """
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Claim).order_by(Claim.created_at.desc())
+        )
+        claims = result.scalars().all()
+        return [
+            {
+                "id": str(c.id),
+                "status": c.status,
+                "total_billed": c.total_billed,
+                "created_at": c.created_at
+            }
+            for c in claims
+        ]
+
 @app.post("/generate-appeal/")
 async def generate_appeal(request: Request, claim_id: str):
     """
@@ -226,3 +261,33 @@ async def get_appeal(claim_id: str):
             "appeal_text": appeal.content,
             "created_at": appeal.created_at
         }
+
+@app.websocket("/ws/tasks/{job_id}")
+async def websocket_task_updates(websocket: WebSocket, job_id: str):
+    """
+    WebSocket endpoint to stream real-time progress updates for a background task.
+    Uses Redis Pub/Sub to listen for updates published by ARQ workers.
+    """
+    await websocket.accept()
+    redis_conn = websocket.app.state.redis_pubsub
+    pubsub = redis_conn.pubsub()
+    channel = f"job_updates:{job_id}"
+    
+    try:
+        await pubsub.subscribe(channel)
+        # Send initial connection confirmation
+        await websocket.send_json({"type": "connected", "job_id": job_id, "channel": channel})
+        
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message["type"] == "message":
+                data = json.loads(message["data"])
+                await websocket.send_json(data)
+                # If the task signals completion, close the socket
+                if data.get("status") in ("completed", "error"):
+                    break
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected for job {job_id}")
+    finally:
+        await pubsub.unsubscribe(channel)
+        await pubsub.close()
