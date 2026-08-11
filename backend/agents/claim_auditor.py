@@ -1,6 +1,6 @@
-import os
 import json
-from core.llm import groq_client, GROQ_API_KEY
+
+from core.llm import LLM_MODEL, require_llm
 from agents.rag_retriever import search_policy_chunks
 from models.claim import ClaimItem
 
@@ -37,16 +37,7 @@ async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
     """
     Audits a single claim item by fetching relevant RAG context and querying Groq.
     """
-    if not GROQ_API_KEY or GROQ_API_KEY == "":
-        print("MOCKING GROQ API (No API Key found)")
-        return {
-            "status": "APPROVED",
-            "reason": "MOCKED - No API key provided.",
-            "policy_clause_cited": "Mocked Clause",
-            "original_clause_text": "This is a mocked response.",
-            "page_number": "1",
-            "confidence": 0.99
-        }
+    client = require_llm()
 
     # 1. Fetch relevant clauses using RAG
     query = f"{item.category} - {item.description}"
@@ -71,12 +62,12 @@ async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
     )
 
     # 4. Call Groq
-    response = await groq_client.chat.completions.create(
+    response = await client.chat.completions.create(
         messages=[
             {"role": "system", "content": "You output JSON and nothing else."},
             {"role": "user", "content": prompt}
         ],
-        model="llama3-70b-8192",
+        model=LLM_MODEL,
         response_format={"type": "json_object"},
         temperature=0.1
     )
@@ -87,10 +78,13 @@ async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
         audit_result = json.loads(content)
         return audit_result
     except Exception as e:
+        # Never fall back to APPROVED here. An unparseable response means the item
+        # was not adjudicated at all, and recording it as approved would put a
+        # verdict in the findings table that no model ever reached.
         print(f"Error parsing Groq output for item {item.id}: {e}")
         return {
-            "status": "APPROVED",
-            "reason": "Failed to parse LLM response. Defaulting to manual review required.",
+            "status": "NEEDS_REVIEW",
+            "reason": "The auditor's response could not be parsed, so this item was not adjudicated. It requires manual review.",
             "policy_clause_cited": None,
             "original_clause_text": None,
             "page_number": None,

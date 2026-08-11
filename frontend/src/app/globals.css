@@ -1,21 +1,20 @@
 @import "tailwindcss";
-@plugin "@tailwindcss/typography";
 
 @theme {
-  --color-slate-900: #0f172a;
-  --color-slate-800: #1e293b;
-  --color-teal-400: #2dd4bf;
-  --color-teal-500: #14b8a6;
-  --color-indigo-500: #6366f1;
-  --color-indigo-600: #4f46e5;
-  --color-emerald-400: #34d399;
-  --color-emerald-500: #10b981;
-  --color-rose-400: #fb7185;
-  --color-rose-500: #f43f5e;
+  --color-slate-900: #020617;
+  --color-slate-800: #0f172a;
+  --color-teal-400: #06b6d4; /* Vibrant Cyan */
+  --color-teal-500: #0891b2;
+  --color-indigo-500: #8b5cf6; /* Vibrant Violet */
+  --color-indigo-600: #7c3aed;
+  --color-emerald-400: #10b981;
+  --color-emerald-500: #059669;
+  --color-rose-400: #f43f5e;
+  --color-rose-500: #e11d48;
 }
 
 :root {
-  --background: #0f172a;
+  --background: #020617;
   --foreground: #f8fafc;
 }
 
@@ -27,20 +26,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 .glass-panel {
-  @apply bg-slate-800/60 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-xl;
+  @apply bg-[#0f0f0f] border border-white/10 rounded-none shadow-none;
 }
 
 .glass-input {
-  @apply bg-slate-900/50 border border-slate-700/50 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all;
+  @apply bg-black border border-white/20 rounded-none text-white focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all;
 }
 
 .btn-primary {
-  @apply bg-gradient-to-r from-teal-500 to-indigo-600 text-white font-medium rounded-lg hover:from-teal-400 hover:to-indigo-500 shadow-lg shadow-teal-500/20 transition-all active:scale-95 px-4 py-2;
+  @apply bg-teal-500 text-black font-semibold rounded-none hover:bg-teal-400 transition-colors active:scale-[0.98] px-5 py-2.5;
 }
 
 .btn-secondary {
-  @apply bg-slate-800 text-slate-300 font-medium rounded-lg hover:bg-slate-700 hover:text-white border border-slate-700 transition-all active:scale-95 px-4 py-2;
+  @apply bg-white text-black font-semibold rounded-none hover:bg-slate-200 transition-colors active:scale-[0.98] px-5 py-2.5;
 }
 
 /* Scrollbar styles */
@@ -58,3 +66,15 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* Custom prose styles for markdown rendering */
+.prose h1 { font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; margin-top: 1.5rem; }
+.prose h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; margin-top: 1.25rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
+.prose h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; }
+.prose p { margin-bottom: 0.75rem; line-height: 1.75; }
+.prose ul, .prose ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li { margin-bottom: 0.25rem; line-height: 1.6; }
+.prose strong { font-weight: 700; }
+.prose blockquote { border-left: 4px solid #6366f1; padding-left: 1rem; margin: 1rem 0; font-style: italic; color: #475569; }

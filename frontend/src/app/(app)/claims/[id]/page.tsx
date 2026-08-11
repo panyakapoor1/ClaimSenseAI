@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { ArrowLeft, FileCheck2, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
+import { API_URL_SERVER } from '@/lib/api';
+
+export const dynamic = 'force-dynamic';
 
 async function getClaimDetails(id: string) {
   try {
-    const res = await fetch(`http://localhost:8000/audit-results/${id}`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL_SERVER}/audit-results/${id}`, { cache: 'no-store' });
     if (!res.ok) {
       if (res.status === 404) return null;
       throw new Error('Failed to fetch claim details');
@@ -16,8 +19,9 @@ async function getClaimDetails(id: string) {
   }
 }
 
-export default async function ClaimDetailsPage({ params }: { params: { id: string } }) {
-  const claim = await getClaimDetails(params.id);
+export default async function ClaimDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const claim = await getClaimDetails(id);
 
   if (!claim) {
     return (

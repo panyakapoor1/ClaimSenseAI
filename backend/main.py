@@ -2,26 +2,22 @@ from fastapi import FastAPI, Request, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from arq import create_pool
-from arq.connections import RedisSettings
-from core.config import settings
+from core.config import settings, get_redis_settings
 from core.database import AsyncSessionLocal
+from core.llm import LLM_AVAILABLE, LLM_MODEL
 from models.user import User
 from models.claim import Claim, ClaimItem, AuditFinding
 from sqlalchemy.future import select
-from pydantic import BaseModel
 import redis.asyncio as aioredis
 import os
 import uuid
 import json
 
-class TaskRequest(BaseModel):
-    task_name: str
-    delay_seconds: int = 5
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("ClaimSense AI Backend Starting...")
-    app.state.redis_pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    app.state.redis_pool = await create_pool(get_redis_settings())
     # Separate raw redis connection for Pub/Sub
     app.state.redis_pubsub = aioredis.from_url(settings.redis_url, decode_responses=True)
     
@@ -63,12 +59,9 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
-
-@app.post("/test-task")
-async def create_test_task(req: TaskRequest, request: Request):
-    job = await request.app.state.redis_pool.enqueue_job("dummy_task", req.task_name, req.delay_seconds)
-    return {"status": "enqueued", "job_id": job.job_id}
+    # Report AI availability so the frontend can label a degraded state rather
+    # than letting uploads fail one at a time with no explanation.
+    return {"status": "healthy", "llm_available": LLM_AVAILABLE, "llm_model": LLM_MODEL if LLM_AVAILABLE else None}
 
 @app.post("/upload-bill/")
 async def upload_bill(request: Request, file: UploadFile = File(...)):
@@ -291,3 +284,9 @@ async def websocket_task_updates(websocket: WebSocket, job_id: str):
     finally:
         await pubsub.unsubscribe(channel)
         await pubsub.close()
+        # Breaking out of the loop leaves the socket open otherwise, so the client
+        # sits waiting on a stream that will never produce another frame.
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass  # already closed by the client disconnecting

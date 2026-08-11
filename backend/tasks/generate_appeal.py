@@ -1,19 +1,10 @@
-import asyncio
-import json
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from core.database import AsyncSessionLocal
 from models.claim import Claim, ClaimItem, AuditFinding, AppealDocument
 from agents.appeal_generator import generate_appeal_letter
-
-async def _publish_progress(ctx, job_id: str, data: dict):
-    """Publish a progress update to Redis Pub/Sub for WebSocket streaming."""
-    try:
-        redis = ctx.get("redis") or ctx.get("pool")
-        if redis:
-            await redis.publish(f"job_updates:{job_id}", json.dumps(data))
-    except Exception as e:
-        print(f"Warning: Failed to publish progress: {e}")
+from core.llm import LLMUnavailableError
+from tasks.progress import publish_progress as _publish_progress
 
 async def generate_appeal_task(ctx, claim_id: str):
     """
@@ -80,8 +71,23 @@ async def generate_appeal_task(ctx, claim_id: str):
             "progress_pct": 40
         })
         
-        # Call the LLM agent
-        appeal_content = await generate_appeal_letter(disputed_items)
+        # Call the LLM agent. On failure nothing is written: an AppealDocument
+        # holding an error message would be listed and opened as a real letter.
+        try:
+            appeal_content = await generate_appeal_letter(disputed_items)
+        except LLMUnavailableError as e:
+            print(f"[{claim_id}] Appeal aborted: {e}")
+            await _publish_progress(ctx, job_id, {
+                "type": "progress", "status": "error", "message": str(e), "progress_pct": 0
+            })
+            return {"status": "error", "reason": "llm_unavailable", "message": str(e)}
+        except Exception as e:
+            print(f"[{claim_id}] Appeal generation failed: {e}")
+            await _publish_progress(ctx, job_id, {
+                "type": "progress", "status": "error",
+                "message": f"Appeal generation failed: {e}", "progress_pct": 0
+            })
+            return {"status": "error", "message": str(e)}
 
         await _publish_progress(ctx, job_id, {
             "type": "progress", "status": "running",

@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { ArrowLeft, Download, FileText, CheckCircle2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { API_URL_SERVER } from '@/lib/api';
+
+export const dynamic = 'force-dynamic';
 
 async function getAppeal(id: string) {
   try {
-    const res = await fetch(`http://localhost:8000/appeal/${id}`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL_SERVER}/appeal/${id}`, { cache: 'no-store' });
     if (!res.ok) {
       if (res.status === 404) return null;
       throw new Error('Failed to fetch appeal');
@@ -16,8 +19,9 @@ async function getAppeal(id: string) {
   }
 }
 
-export default async function AppealDetailsPage({ params }: { params: { id: string } }) {
-  const appeal = await getAppeal(params.id);
+export default async function AppealDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const appeal = await getAppeal(id);
 
   if (!appeal) {
     return (
@@ -27,7 +31,7 @@ export default async function AppealDetailsPage({ params }: { params: { id: stri
         <p className="text-slate-500 mb-6">
           An appeal letter has not been generated for this claim yet.
         </p>
-        <Link href={`/claims/${params.id}`} className="btn-primary">
+        <Link href={`/claims/${id}`} className="btn-primary">
           Back to Claim Details
         </Link>
       </div>
@@ -37,7 +41,7 @@ export default async function AppealDetailsPage({ params }: { params: { id: stri
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
       <header className="mb-8">
-        <Link href={`/claims/${params.id}`} className="inline-flex items-center text-slate-400 hover:text-teal-400 transition-colors mb-4 text-sm font-medium">
+        <Link href={`/claims/${id}`} className="inline-flex items-center text-slate-400 hover:text-teal-400 transition-colors mb-4 text-sm font-medium">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Claim Details
         </Link>
@@ -59,7 +63,7 @@ export default async function AppealDetailsPage({ params }: { params: { id: stri
         </div>
       </header>
 
-      <div className="glass-panel p-8 md:p-12 bg-white text-slate-900 border-none print:shadow-none prose prose-slate max-w-none">
+      <div className="glass-panel p-8 md:p-12 bg-white text-slate-900 border-none prose max-w-none">
         {/* Render markdown using react-markdown. 
             Note: We set the background to white to mimic a real document. */}
         <ReactMarkdown>{appeal.appeal_text}</ReactMarkdown>

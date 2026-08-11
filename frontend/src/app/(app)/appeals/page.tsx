@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { FileText, ArrowRight } from 'lucide-react';
+import { API_URL_SERVER } from '@/lib/api';
+
+export const dynamic = 'force-dynamic';
 
 async function getClaims() {
   try {
-    const res = await fetch('http://localhost:8000/claims/', { cache: 'no-store' });
+    const res = await fetch(`${API_URL_SERVER}/claims/`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch claims');
     return await res.json();
   } catch (err) {

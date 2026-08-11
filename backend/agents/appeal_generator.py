@@ -1,6 +1,6 @@
-import os
-from core.llm import groq_client, GROQ_API_KEY
 from typing import List, Dict
+
+from core.llm import LLM_MODEL, require_llm
 
 APPEAL_PROMPT = """You are an expert patient advocate and medical billing specialist.
 Your job is to write a formal, persuasive, and professional appeal letter to a hospital or insurance company.
@@ -22,9 +22,7 @@ async def generate_appeal_letter(disputed_items_data: List[Dict]) -> str:
     """
     Generates a formal appeal letter using Llama-3 based on the disputed audit findings.
     """
-    if not GROQ_API_KEY or GROQ_API_KEY == "":
-        print("MOCKING GROQ API (No API Key found)")
-        return "### MOCKED APPEAL LETTER\n\nTo the Claims Review Department,\n\nWe are appealing the rejected items based on the policy clauses.\n\nSincerely,\nPatient Advocate"
+    client = require_llm()
 
     if not disputed_items_data:
         return "No rejected items found to appeal."
@@ -42,18 +40,16 @@ async def generate_appeal_letter(disputed_items_data: List[Dict]) -> str:
 
     prompt = APPEAL_PROMPT.format(disputed_items=formatted_items)
 
-    try:
-        response = await groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": "You are a professional patient advocate. You output only the markdown text of the letter."},
-                {"role": "user", "content": prompt}
-            ],
-            model="llama3-70b-8192",
-            temperature=0.3
-        )
+    # Errors propagate on purpose. Returning the error text as the letter body
+    # would persist a failure message into appeal_documents as if it were a
+    # generated appeal, and the UI would render it as one.
+    response = await client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": "You are a professional patient advocate. You output only the markdown text of the letter."},
+            {"role": "user", "content": prompt}
+        ],
+        model=LLM_MODEL,
+        temperature=0.3
+    )
 
-        content = response.choices[0].message.content
-        return content
-    except Exception as e:
-        print(f"Error generating appeal letter: {e}")
-        return f"Failed to generate appeal letter due to an error: {e}"
+    return response.choices[0].message.content

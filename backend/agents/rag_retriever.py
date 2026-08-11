@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy.future import select
 from sqlalchemy import text
 from core.database import AsyncSessionLocal
@@ -14,8 +16,9 @@ async def search_policy_chunks(query: str, policy_id: str, top_k: int = 5) -> li
     2. Uses pgvector's cosine distance operator (<=>) to find the most relevant policy clauses.
     3. Returns the top-k most similar chunks with their similarity scores.
     """
-    # Generate embedding for the search query
-    query_embedding = generate_embeddings([query])[0]
+    # Generate embedding for the search query. Encoding is synchronous CPU work,
+    # so keep it off the event loop.
+    query_embedding = (await asyncio.to_thread(generate_embeddings, [query]))[0]
 
     async with AsyncSessionLocal() as session:
         # pgvector cosine distance search

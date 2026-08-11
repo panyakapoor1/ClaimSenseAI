@@ -11,8 +11,9 @@ async def ingest_policy_task(ctx, policy_id: str, pdf_path: str):
     print(f"Starting policy ingestion for policy {policy_id}")
 
     try:
+        import asyncio
         # 1. Extract and chunk the PDF text
-        chunks = extract_policy_text(pdf_path)
+        chunks = await asyncio.to_thread(extract_policy_text, pdf_path)
         print(f"Extracted {len(chunks)} chunks from policy PDF")
 
         if not chunks:
@@ -21,7 +22,7 @@ async def ingest_policy_task(ctx, policy_id: str, pdf_path: str):
 
         # 2. Generate embeddings for all chunks in a single batch
         texts = [c["text_content"] for c in chunks]
-        embeddings = generate_embeddings(texts)
+        embeddings = await asyncio.to_thread(generate_embeddings, texts)
         print(f"Generated {len(embeddings)} embeddings (dim={len(embeddings[0])})")
 
         # 3. Store chunks + embeddings in PostgreSQL via pgvector
