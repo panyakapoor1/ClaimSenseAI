@@ -1,31 +1,28 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Date, Float, String
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
-import uuid
-import datetime
-from .base import Base
 
-class Policy(Base):
+from .base import Base, TimestampMixin, fk, pk
+
+
+class Policy(Base, TimestampMixin):
     __tablename__ = "policies"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    insurer_name = Column(String, nullable=False)
-    policy_name = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    id = pk()
+    organization_id = fk("organizations.id")
 
-    user = relationship("User", back_populates="policies")
-    chunks = relationship("PolicyChunk", back_populates="policy", cascade="all, delete-orphan")
+    insurer_name = Column(String(300), nullable=False)
+    policy_name = Column(String(300), nullable=False)
+    policy_number = Column(String(120), nullable=True, index=True)
 
-class PolicyChunk(Base):
-    __tablename__ = "policy_chunks"
+    # Coverage window. Policy timing is a standard risk signal — treatment dated
+    # outside the window, or a claim filed suspiciously soon after inception.
+    effective_from = Column(Date, nullable=True)
+    effective_to = Column(Date, nullable=True)
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    policy_id = Column(UUID(as_uuid=True), ForeignKey("policies.id", ondelete="CASCADE"), nullable=False)
-    page_number = Column(String, nullable=True)
-    section_header = Column(String, nullable=True)
-    text_content = Column(Text, nullable=False)
-    embedding = Column(Vector(384))
+    sum_insured = Column(Float, nullable=True)
+    room_rent_cap = Column(Float, nullable=True)
 
-    policy = relationship("Policy", back_populates="chunks")
+    organization = relationship("Organization", back_populates="policies")
+    claims = relationship("Claim", back_populates="policy")
+    documents = relationship("Document", back_populates="policy")
+    chunks = relationship("DocumentChunk", back_populates="policy")

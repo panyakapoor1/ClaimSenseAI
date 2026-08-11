@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, Activity, FileCheck2, FileUp, ListChecks, AlertTriangle, TrendingUp } from 'lucide-react';
 import ClaimVolumeChart from '@/components/ClaimVolumeChart';
 import { API_URL_SERVER } from '@/lib/api';
-import { summarise, volumeByDay, type Claim } from '@/lib/claimStatus';
+import { formatCurrency, summarise, volumeByDay, type Claim } from '@/lib/claimStatus';
 
 async function getClaims(): Promise<{ claims: Claim[]; reachable: boolean }> {
   try {
@@ -18,12 +18,6 @@ async function getClaims(): Promise<{ claims: Claim[]; reachable: boolean }> {
 // Declared explicitly because getClaims() catches its own errors, which would
 // otherwise swallow the signal Next uses to infer that this route is dynamic.
 export const dynamic = 'force-dynamic';
-
-const currency = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
 
 export default async function DashboardPage() {
   const { claims, reachable } = await getClaims();
@@ -92,7 +86,9 @@ export default async function DashboardPage() {
           <ClaimVolumeChart data={volume} />
           <p className="text-xs text-slate-500 mt-4 pt-4 border-t border-white/10">
             Total billed across all claims:{' '}
-            <span className="text-slate-300 font-medium tabular-nums">{currency.format(stats.totalBilled)}</span>
+            <span className="text-slate-300 font-medium tabular-nums">
+              {formatCurrency(stats.totalBilled, claims[0]?.currency ?? 'INR')}
+            </span>
           </p>
         </div>
 

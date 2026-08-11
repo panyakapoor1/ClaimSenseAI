@@ -3,7 +3,6 @@ import asyncio
 from sqlalchemy.future import select
 from sqlalchemy import text
 from core.database import AsyncSessionLocal
-from models.policy import PolicyChunk
 from agents.policy_ingestor import generate_embeddings
 
 
@@ -25,14 +24,15 @@ async def search_policy_chunks(query: str, policy_id: str, top_k: int = 5) -> li
         # The <=> operator computes cosine distance (0 = identical, 2 = opposite)
         result = await session.execute(
             text("""
-                SELECT 
+                SELECT
                     id,
                     section_header,
                     text_content,
                     page_number,
                     1 - (embedding <=> :query_embedding) AS similarity
-                FROM policy_chunks
+                FROM document_chunks
                 WHERE policy_id = :policy_id
+                  AND embedding IS NOT NULL
                 ORDER BY embedding <=> :query_embedding
                 LIMIT :top_k
             """),

@@ -17,18 +17,23 @@ Your job is to determine whether a specific line item from a hospital bill shoul
 
 ### INSTRUCTIONS:
 1. Review the policy clauses carefully to see if the item is explicitly excluded, capped, or allowed.
-2. If the item is excluded, mark it REJECTED.
-3. If the item is covered but capped, or fully covered, mark it APPROVED (for now we treat partial as APPROVED with a reason).
-4. If there is no mention of the item in the clauses, assume standard medical necessity and mark it APPROVED, but state that it relies on medical necessity.
-5. Provide a confidence score between 0.0 and 1.0.
+2. If the item is explicitly excluded, mark it REJECTED.
+3. If the item is covered but subject to a limit the billed amount exceeds, mark it
+   CAPPED and set "capped_amount" to the maximum the policy allows.
+4. If the item is covered without limit, mark it APPROVED.
+5. If the clauses do not mention the item at all, mark it NEEDS_REVIEW. Do not
+   assume medical necessity — say that the policy is silent and a human must decide.
+6. Provide a confidence score between 0.0 and 1.0 reflecting how directly the
+   clauses settle the question.
 
 Respond strictly in the following JSON schema:
 {{
-  "status": "APPROVED" | "REJECTED",
+  "status": "APPROVED" | "CAPPED" | "REJECTED" | "NEEDS_REVIEW",
   "reason": "Explain your reasoning based on the policy text.",
   "policy_clause_cited": "The exact 'section_header' you relied on. Leave null if none applied.",
   "original_clause_text": "A brief snippet of the text you relied on. Leave null if none applied.",
   "page_number": "The page number of the cited clause. Leave null if none applied.",
+  "capped_amount": 12000.0,
   "confidence": 0.95
 }}
 """

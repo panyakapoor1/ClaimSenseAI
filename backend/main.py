@@ -3,12 +3,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from arq import create_pool
 from core.config import settings, get_redis_settings
+from core.bootstrap import ensure_demo_tenant, new_claim_reference
 from core.database import AsyncSessionLocal
 from core.llm import LLM_AVAILABLE, LLM_MODEL
-from models.user import User
-from models.claim import Claim, ClaimItem, AuditFinding
+from models import (
+    AppealDocument,
+    Claim,
+    ClaimItem,
+    ClaimStatus,
+    Document,
+    DocumentKind,
+    Policy,
+)
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 import redis.asyncio as aioredis
+import hashlib
 import os
 import uuid
 import json
@@ -21,16 +31,13 @@ async def lifespan(app: FastAPI):
     # Separate raw redis connection for Pub/Sub
     app.state.redis_pubsub = aioredis.from_url(settings.redis_url, decode_responses=True)
     
-    # Seed a dummy user for testing if one doesn't exist
+    # Ownership columns are now required, so a real tenant must exist before any
+    # upload can be attributed. Idempotent; P3 replaces this with real signup.
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).limit(1))
-        user = result.scalars().first()
-        if not user:
-            user = User(email="test@claimsense.ai")
-            session.add(user)
-            await session.commit()
-            print(f"Created dummy user: {user.id}")
-            
+        org, user = await ensure_demo_tenant(session)
+        await session.commit()
+        print(f"Demo tenant ready: org={org.slug} analyst={user.email if user else 'none'}")
+
     yield
     print("ClaimSense AI Backend Shutting Down...")
     await app.state.redis_pubsub.close()
@@ -63,78 +70,107 @@ async def health_check():
     # than letting uploads fail one at a time with no explanation.
     return {"status": "healthy", "llm_available": LLM_AVAILABLE, "llm_model": LLM_MODEL if LLM_AVAILABLE else None}
 
+async def _persist_upload(file: UploadFile) -> tuple[str, bytes]:
+    """Write an upload to disk and return its path and bytes.
+
+    P4 replaces the local directory with object storage; the Document row already
+    records a `storage_key` so that swap does not change the schema.
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    payload = await file.read()
+    os.makedirs("uploads", exist_ok=True)
+    file_path = f"uploads/{uuid.uuid4()}_{file.filename}"
+    with open(file_path, "wb") as buffer:
+        buffer.write(payload)
+    return file_path, payload
+
+
 @app.post("/upload-bill/")
 async def upload_bill(request: Request, file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
-    os.makedirs("uploads", exist_ok=True)
-    file_path = f"uploads/{uuid.uuid4()}_{file.filename}"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-        
+    file_path, payload = await _persist_upload(file)
+
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).limit(1))
-        user = result.scalars().first()
-        
-        # Create a pending claim
+        org, user = await ensure_demo_tenant(session)
+
         claim = Claim(
-            user_id=user.id,
+            organization_id=org.id,
+            created_by_id=user.id if user else None,
+            reference=new_claim_reference(),
             total_billed=0.0,
-            status="PENDING"
+            status=ClaimStatus.RECEIVED,
         )
         session.add(claim)
+        await session.flush()
+
+        document = Document(
+            organization_id=org.id,
+            claim_id=claim.id,
+            kind=DocumentKind.BILL,
+            filename=file.filename,
+            byte_size=len(payload),
+            storage_key=file_path,
+            checksum_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+        session.add(document)
         await session.commit()
-        await session.refresh(claim)
-        
-    # Enqueue task
+        claim_id, document_id = str(claim.id), str(document.id)
+
     job = await request.app.state.redis_pool.enqueue_job(
-        "extract_bill_task", 
-        str(claim.id), 
-        file_path
+        "extract_bill_task", claim_id, document_id
     )
-    
+
     return {
         "status": "processing",
-        "claim_id": str(claim.id),
-        "job_id": job.job_id
+        "claim_id": claim_id,
+        "document_id": document_id,
+        "job_id": job.job_id,
     }
 
+
 @app.post("/upload-policy/")
-async def upload_policy(request: Request, file: UploadFile = File(...), insurer_name: str = "Unknown", policy_name: str = "Unknown"):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
-    os.makedirs("uploads", exist_ok=True)
-    file_path = f"uploads/{uuid.uuid4()}_{file.filename}"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-        
+async def upload_policy(
+    request: Request,
+    file: UploadFile = File(...),
+    insurer_name: str = "Unknown",
+    policy_name: str = "Unknown",
+):
+    file_path, payload = await _persist_upload(file)
+
     async with AsyncSessionLocal() as session:
-        from models.policy import Policy
-        result = await session.execute(select(User).limit(1))
-        user = result.scalars().first()
-        
+        org, _user = await ensure_demo_tenant(session)
+
         policy = Policy(
-            user_id=user.id,
+            organization_id=org.id,
             insurer_name=insurer_name,
-            policy_name=policy_name
+            policy_name=policy_name,
         )
         session.add(policy)
+        await session.flush()
+
+        document = Document(
+            organization_id=org.id,
+            policy_id=policy.id,
+            kind=DocumentKind.POLICY,
+            filename=file.filename,
+            byte_size=len(payload),
+            storage_key=file_path,
+            checksum_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+        session.add(document)
         await session.commit()
-        await session.refresh(policy)
-        
-    # Enqueue background ingestion task
+        policy_id, document_id = str(policy.id), str(document.id)
+
     job = await request.app.state.redis_pool.enqueue_job(
-        "ingest_policy_task",
-        str(policy.id),
-        file_path
+        "ingest_policy_task", policy_id, document_id
     )
-    
+
     return {
         "status": "processing",
-        "policy_id": str(policy.id),
-        "job_id": job.job_id
+        "policy_id": policy_id,
+        "document_id": document_id,
+        "job_id": job.job_id,
     }
 
 @app.get("/search-policy/{policy_id}")
@@ -159,50 +195,49 @@ async def get_audit_results(claim_id: str):
     Fetches the generated audit findings for a specific claim.
     """
     async with AsyncSessionLocal() as session:
-        # Check if claim exists
         claim = await session.get(Claim, claim_id)
         if not claim:
             raise HTTPException(status_code=404, detail="Claim not found")
 
-        # Fetch claim items along with their audit findings
+        # Eager-loaded rather than a second manual query keyed on item ids, which
+        # issued a query per page load and returned nothing when the list was empty.
         result = await session.execute(
-            select(ClaimItem).where(ClaimItem.claim_id == claim_id)
+            select(ClaimItem)
+            .options(selectinload(ClaimItem.audit_finding))
+            .where(ClaimItem.claim_id == claim_id)
+            .order_by(ClaimItem.line_number, ClaimItem.created_at)
         )
         items = result.scalars().all()
-        
-        # We need to manually fetch the findings for these items since we don't have eager loading setup here
-        # or we can query AuditFinding directly
-        findings_result = await session.execute(
-            select(AuditFinding).where(AuditFinding.claim_item_id.in_([item.id for item in items]))
-        )
-        findings = findings_result.scalars().all()
-        
-        # Map findings to items
-        finding_map = {f.claim_item_id: f for f in findings}
-        
+
         response_items = []
         for item in items:
-            finding = finding_map.get(item.id)
+            finding = item.audit_finding
             response_items.append({
                 "item_id": str(item.id),
                 "category": item.category,
                 "description": item.description,
                 "billed_amount": item.billed_amount,
+                "allowed_amount": item.allowed_amount,
+                "procedure_code": item.procedure_code,
                 "audit": {
-                    "status": finding.status if finding else "PENDING",
-                    "reason": finding.reason if finding else None,
-                    "policy_clause_cited": finding.policy_clause_cited if finding else None,
-                    "original_clause_text": finding.original_clause_text if finding else None,
-                    "page_number": finding.page_number if finding else None,
-                    "confidence": finding.confidence if finding else None
+                    "status": finding.status.value,
+                    "reason": finding.reason,
+                    "policy_clause_cited": finding.policy_clause_cited,
+                    "original_clause_text": finding.original_clause_text,
+                    "page_number": finding.page_number,
+                    "confidence": finding.confidence,
+                    "capped_amount": finding.capped_amount,
                 } if finding else None
             })
 
         return {
             "claim_id": str(claim.id),
-            "claim_status": claim.status,
+            "reference": claim.reference,
+            "claim_status": claim.status.value,
             "total_billed": claim.total_billed,
-            "items": response_items
+            "total_approved": claim.total_approved,
+            "currency": claim.currency,
+            "items": response_items,
         }
 
 @app.get("/claims/")
@@ -218,9 +253,11 @@ async def list_claims():
         return [
             {
                 "id": str(c.id),
-                "status": c.status,
+                "reference": c.reference,
+                "status": c.status.value,
                 "total_billed": c.total_billed,
-                "created_at": c.created_at
+                "currency": c.currency,
+                "created_at": c.created_at,
             }
             for c in claims
         ]
@@ -240,7 +277,6 @@ async def get_appeal(claim_id: str):
     """
     Fetches the generated appeal letter for a specific claim.
     """
-    from models.claim import AppealDocument
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(AppealDocument).where(AppealDocument.claim_id == claim_id)

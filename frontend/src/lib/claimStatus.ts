@@ -1,20 +1,80 @@
 export type Claim = {
   id: string;
-  status: string;
+  reference: string;
+  status: ClaimStatus;
   total_billed: number;
+  currency: string;
   created_at: string;
 };
 
 /**
- * Claim statuses grouped by what an analyst actually does about them.
+ * The claim lifecycle, mirroring the `claim_status` enum in the database.
  *
- * The backend writes these as free-form strings today; P1 replaces them with a
- * Postgres enum driven by an explicit state machine. Until then this module is
- * the single place that knows the vocabulary.
+ * Previously these were unconstrained strings on both sides, and the UI checked
+ * for a 'COMPLETED' status the backend never wrote — so every finished claim
+ * fell through to the default badge.
  */
-export const IN_PROGRESS = ['PENDING', 'EXTRACTED'];
-export const AUDITED = ['AUDIT_COMPLETE', 'APPEAL_GENERATED', 'NO_APPEAL_NEEDED'];
-export const NEEDS_ATTENTION = ['FAILED', 'LLM_UNAVAILABLE'];
+export const CLAIM_STATUSES = [
+  'RECEIVED', 'EXTRACTING', 'EXTRACTED', 'AUDITING', 'AUDIT_COMPLETE',
+  'APPEAL_GENERATED', 'NO_APPEAL_NEEDED', 'CLOSED', 'FAILED', 'LLM_UNAVAILABLE',
+] as const;
+
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
+export const IN_PROGRESS: ClaimStatus[] = ['RECEIVED', 'EXTRACTING', 'EXTRACTED', 'AUDITING'];
+export const AUDITED: ClaimStatus[] = ['AUDIT_COMPLETE', 'APPEAL_GENERATED', 'NO_APPEAL_NEEDED', 'CLOSED'];
+export const NEEDS_ATTENTION: ClaimStatus[] = ['FAILED', 'LLM_UNAVAILABLE'];
+
+type Presentation = { label: string; tone: 'progress' | 'done' | 'attention' };
+
+const PRESENTATION: Record<ClaimStatus, Presentation> = {
+  RECEIVED: { label: 'Received', tone: 'progress' },
+  EXTRACTING: { label: 'Reading bill', tone: 'progress' },
+  EXTRACTED: { label: 'Bill parsed', tone: 'progress' },
+  AUDITING: { label: 'Auditing', tone: 'progress' },
+  AUDIT_COMPLETE: { label: 'Audit complete', tone: 'done' },
+  APPEAL_GENERATED: { label: 'Appeal drafted', tone: 'done' },
+  NO_APPEAL_NEEDED: { label: 'No appeal needed', tone: 'done' },
+  CLOSED: { label: 'Closed', tone: 'done' },
+  FAILED: { label: 'Failed', tone: 'attention' },
+  LLM_UNAVAILABLE: { label: 'AI unavailable', tone: 'attention' },
+};
+
+export function presentStatus(status: string): Presentation {
+  return PRESENTATION[status as ClaimStatus] ?? { label: status, tone: 'attention' };
+}
+
+export const TONE_CLASS: Record<Presentation['tone'], string> = {
+  progress: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+  done: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+  attention: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+};
+
+/** Per-line adjudication outcomes, mirroring the `adjudication_status` enum. */
+export type AdjudicationStatus = 'APPROVED' | 'CAPPED' | 'REJECTED' | 'NEEDS_REVIEW';
+
+export const ADJUDICATION: Record<AdjudicationStatus, { label: string; accent: string; chip: string }> = {
+  APPROVED: {
+    label: 'Approved',
+    accent: 'border-l-emerald-500',
+    chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+  },
+  CAPPED: {
+    label: 'Capped',
+    accent: 'border-l-amber-500',
+    chip: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+  },
+  REJECTED: {
+    label: 'Rejected',
+    accent: 'border-l-rose-500',
+    chip: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+  },
+  NEEDS_REVIEW: {
+    label: 'Needs review',
+    accent: 'border-l-sky-500',
+    chip: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+  },
+};
 
 export type ClaimStats = {
   total: number;
@@ -63,4 +123,12 @@ export function volumeByDay(claims: Claim[], days = 14) {
     label: new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     claims,
   }));
+}
+
+export function formatCurrency(amount: number, currency = 'INR') {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }

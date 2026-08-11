@@ -1,8 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.future import select
 from core.database import AsyncSessionLocal
-from models.claim import Claim, ClaimItem, AuditFinding
-from models.policy import PolicyChunk
+from models import AdjudicationStatus, Claim, ClaimItem, ClaimStatus, DocumentChunk, AuditFinding
 from agents.claim_auditor import audit_claim_item
 from core.llm import LLMUnavailableError
 from tasks.claim_status import mark_claim as _mark_claim
@@ -14,6 +13,34 @@ import asyncio
 # downloads the all-MiniLM-L6-v2 embedding model before it can embed anything.
 _WAIT_ATTEMPTS = 60
 _WAIT_INTERVAL_SECONDS = 2
+
+
+def _coerce_status(value) -> AdjudicationStatus:
+    """Map the model's free-text verdict onto the enum.
+
+    Anything unrecognised becomes NEEDS_REVIEW rather than a default verdict: a
+    value the model did not actually produce must never be recorded as a
+    decision it made.
+    """
+    try:
+        return AdjudicationStatus(str(value).strip().upper())
+    except (ValueError, AttributeError):
+        return AdjudicationStatus.NEEDS_REVIEW
+
+
+def _coerce_page(value) -> int | None:
+    """Page numbers arrive as strings like "Page 8" or "8"."""
+    if value is None:
+        return None
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def _coerce_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 async def audit_claim_task(ctx, claim_id: str, policy_id: str):
@@ -30,7 +57,7 @@ async def audit_claim_task(ctx, claim_id: str, policy_id: str):
         # Configuration problem, not a transient failure. Say so plainly and do
         # not retry: no amount of retrying conjures an API key.
         print(f"Audit aborted for claim {claim_id}: {e}")
-        await _mark_claim(claim_id, "LLM_UNAVAILABLE")
+        await _mark_claim(claim_id, ClaimStatus.LLM_UNAVAILABLE, reason=str(e))
         await _publish_progress(ctx, job_id, {
             "type": "progress", "status": "error",
             "message": str(e),
@@ -69,10 +96,10 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
             claim = result.scalars().first()
             status = claim.status if claim else None
 
-        if status == "EXTRACTED":
+        if status == ClaimStatus.EXTRACTED:
             bill_ready = True
             break
-        if status == "FAILED":
+        if status in (ClaimStatus.FAILED, ClaimStatus.LLM_UNAVAILABLE):
             break
 
         await _publish_progress(ctx, job_id, {
@@ -97,8 +124,8 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
     for attempt in range(_WAIT_ATTEMPTS):
         async with AsyncSessionLocal() as poll_session:
             chunk_count = await poll_session.scalar(
-                select(func.count()).select_from(PolicyChunk).where(
-                    PolicyChunk.policy_id == policy_id
+                select(func.count()).select_from(DocumentChunk).where(
+                    DocumentChunk.policy_id == policy_id
                 )
             )
         if chunk_count and chunk_count > 0:
@@ -158,12 +185,13 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
             # Create the AuditFinding record
             finding = AuditFinding(
                 claim_item_id=item.id,
-                status=llm_decision.get("status", "NEEDS_REVIEW"),
+                status=_coerce_status(llm_decision.get("status")),
                 reason=llm_decision.get("reason", "No reason provided."),
                 policy_clause_cited=llm_decision.get("policy_clause_cited"),
                 original_clause_text=llm_decision.get("original_clause_text"),
-                page_number=llm_decision.get("page_number"),
-                confidence=llm_decision.get("confidence", 0.0)
+                page_number=_coerce_page(llm_decision.get("page_number")),
+                capped_amount=_coerce_float(llm_decision.get("capped_amount")),
+                confidence=_coerce_float(llm_decision.get("confidence")) or 0.0,
             )
             
             # Add to session
@@ -176,7 +204,7 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
         # Update the parent claim status
         claim = await session.get(Claim, claim_id)
         if claim:
-            claim.status = "AUDIT_COMPLETE"
+            claim.status = ClaimStatus.AUDIT_COMPLETE
             
         await session.commit()
         print(f"Audit completed for claim {claim_id}. {len(audit_findings)} findings saved.")
