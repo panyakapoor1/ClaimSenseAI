@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Enum, Float, Integer, String, Text
+from sqlalchemy import Column, Date, Enum, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base, TimestampMixin, fk, pk
@@ -130,6 +130,12 @@ class AuditFinding(Base, TimestampMixin):
     """
 
     __tablename__ = "audit_findings"
+    __table_args__ = (
+        # Enforced in the database, not just implied by `uselist=False`. Without
+        # it a re-audit inserted a second verdict per line and the ORM returned
+        # whichever it loaded first.
+        UniqueConstraint("claim_item_id", name="uq_audit_findings_claim_item_id"),
+    )
 
     id = pk()
     claim_item_id = fk("claim_items.id")

@@ -88,6 +88,7 @@ class Event(Base, TimestampMixin):
     payload = Column(JSONB, nullable=True)
 
     claim = relationship("Claim", back_populates="events")
+    actor = relationship("User")
 
 
 class AuditLog(Base):

@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 
+from sqlalchemy import delete
 from sqlalchemy.future import select
 
 from agents.bill_extractor import extract_bill_data
@@ -19,7 +20,7 @@ from models import (
     ExtractedFact,
     FactKind,
 )
-from services import storage
+from services import claim_state, storage
 from tasks.claim_status import mark_claim
 from tasks.progress import publish_progress
 
@@ -41,7 +42,11 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
         document.status = DocumentStatus.PARSING
         await session.commit()
 
-    await mark_claim(claim_id, ClaimStatus.EXTRACTING)
+    async with AsyncSessionLocal() as session:
+        claim = await session.get(Claim, claim_id)
+        if claim is not None:
+            await claim_state.transition(session, claim, ClaimStatus.EXTRACTING)
+            await session.commit()
     await publish_progress(ctx, job_id, {
         "type": "progress", "status": "started",
         "message": "Reading the medical bill...",
@@ -131,10 +136,18 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
             })
             return {"status": "failed", "error": "Claim not found"}
 
+        # Idempotency: a re-run replaces the previous extraction rather than
+        # adding a second copy of every line, page and fact. Items cascade to
+        # their findings, so stale verdicts go with them.
+        await session.execute(delete(ExtractedFact).where(ExtractedFact.claim_id == claim_id))
+        await session.execute(delete(ClaimItem).where(ClaimItem.claim_id == claim_id))
+        await session.execute(delete(DocumentPage).where(DocumentPage.document_id == document_id))
+        await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+        await session.flush()
+
         claim.total_billed = float(bill_data.get("total_billed") or 0.0)
         claim.admission_date = _as_date(bill_data.get("admission_date"))
         claim.discharge_date = _as_date(bill_data.get("discharge_date"))
-        claim.status = ClaimStatus.EXTRACTED
 
         for page in pages:
             session.add(
@@ -245,12 +258,31 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
             document.status = DocumentStatus.PARSED
             document.page_count = len(pages)
 
+        await claim_state.transition(
+            session, claim, ClaimStatus.EXTRACTED,
+            summary=f"Extracted {len(items)} line item(s)",
+            detail=(f"{ocr_pages} page(s) read by OCR." if ocr_pages else None),
+            payload={"items": len(items), "located": facts_located, "ocr_pages": ocr_pages},
+        )
+
         await session.commit()
+        pending_policy_id = str(claim.policy_id) if claim.policy_id else None
 
     print(
         f"Claim {claim_id} extracted: {len(items)} items, "
         f"{facts_located}/{len(items)} located on the page."
     )
+
+    # Hand off to the audit rather than making it wait for us. An audit request
+    # that arrived while this job was running recorded its policy on the claim;
+    # this is where that intent is honoured.
+    queued_audit = False
+    if pending_policy_id:
+        queue = ctx.get("redis")
+        if queue is not None:
+            await queue.enqueue_job("audit_claim_task", claim_id, pending_policy_id)
+            queued_audit = True
+            print(f"Chained audit for claim {claim_id} against {pending_policy_id}.")
     await publish_progress(ctx, job_id, {
         "type": "progress", "status": "completed",
         "message": (
@@ -266,6 +298,7 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
         "total_items": len(items),
         "located": facts_located,
         "ocr_pages": ocr_pages,
+        "queued_audit": queued_audit,
     }
 
 

@@ -10,6 +10,8 @@ from schemas.evidence import (
     EvidenceResponse,
     FactOut,
     Region,
+    TimelineEvent,
+    TimelineResponse,
 )
 from schemas import (
     AppealOut,
@@ -28,8 +30,9 @@ from services import claims as claim_service
 from services import evidence as evidence_service
 from services.audit import record_audit
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from models import AppealDocument, User
+from models import AppealDocument, Event, User
 
 router = APIRouter(prefix="/claims", tags=["claims"])
 
@@ -303,5 +306,50 @@ async def get_evidence(
                 ),
             )
             for f in facts
+        ],
+    )
+
+
+@router.get(
+    "/{claim_id}/timeline",
+    response_model=TimelineResponse,
+    summary="Everything that has happened to this claim, in order",
+    description=(
+        "System actions, evidence arriving, AI findings and human decisions on "
+        "one ordered stream. Written as events occur rather than reconstructed "
+        "from the current state."
+    ),
+)
+async def get_timeline(
+    claim_id: uuid.UUID,
+    session: SessionDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
+    await claim_service.get_claim_detail(
+        session, claim_id, organization_id=user.organization_id
+    )
+
+    events = (
+        await session.execute(
+            select(Event)
+            .options(selectinload(Event.actor))
+            .where(Event.claim_id == claim_id)
+            .order_by(Event.occurred_at, Event.created_at)
+        )
+    ).scalars().all()
+
+    return TimelineResponse(
+        claim_id=claim_id,
+        events=[
+            TimelineEvent(
+                id=e.id,
+                kind=e.kind,
+                summary=e.summary,
+                detail=e.detail,
+                occurred_at=e.occurred_at,
+                actor_name=e.actor.full_name if e.actor else None,
+                payload=e.payload,
+            )
+            for e in events
         ],
     )

@@ -1,6 +1,26 @@
-from sqlalchemy import func
-from sqlalchemy.future import select
+"""Adjudicate a claim against a policy.
+
+The prototype coordinated with the extraction job by polling: two 60×2s loops
+sleeping until the claim reached EXTRACTED and the policy had chunks. That is a
+race condition with a timeout attached — two minutes wasted in the worst happy
+case, a silent give-up in the slow one, and the ordering rules written down
+nowhere.
+
+This task now checks once and returns. If extraction is still running, the job
+that produces the line items re-enqueues this one on completion; if the policy is
+still indexing, the job asks arq to redeliver it later. Work is triggered by the
+event that makes it possible rather than by a worker sleeping on it.
+"""
+
+import asyncio
+
+from arq import Retry
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import selectinload
+
+from agents.claim_auditor import audit_claim_item
 from core.database import AsyncSessionLocal
+from core.llm import LLMUnavailableError
 from models import (
     AdjudicationStatus,
     AuditFinding,
@@ -8,25 +28,20 @@ from models import (
     ClaimItem,
     ClaimStatus,
     DocumentChunk,
+    EventKind,
     ExtractedFact,
     ModelVersion,
     Policy,
     RiskScore,
     RiskSignal,
 )
+from services import claim_state
 from services import risk as risk_engine
-from sqlalchemy.orm import selectinload
-from agents.claim_auditor import audit_claim_item
-from core.llm import LLMUnavailableError
 from tasks.claim_status import mark_claim as _mark_claim
 from tasks.progress import publish_progress as _publish_progress
-import asyncio
 
-# Bill extraction and policy ingestion are separate jobs that race with this one.
-# Policy ingestion is the slower of the two on a cold worker: the first run
-# downloads the all-MiniLM-L6-v2 embedding model before it can embed anything.
-_WAIT_ATTEMPTS = 60
-_WAIT_INTERVAL_SECONDS = 2
+# How many times to wait for policy indexing before treating it as broken.
+MAX_INDEX_WAITS = 5
 
 
 def _coerce_status(value) -> AdjudicationStatus:
@@ -58,23 +73,23 @@ def _coerce_float(value) -> float | None:
 
 
 async def audit_claim_task(ctx, claim_id: str, policy_id: str):
-    """Audit an entire claim item by item.
+    """Adjudicate every line item, then score the claim.
 
-    Any unhandled exception is reported over the progress channel before it
-    propagates: otherwise the task dies silently and the UI waits forever on a
-    completion frame that will never arrive.
+    Safe to run more than once: prior findings, signals and scores are replaced
+    rather than appended to, so a retry or a deliberate re-audit leaves exactly
+    one verdict per line.
     """
     job_id = ctx.get("job_id", "unknown")
     try:
         return await _run_audit(ctx, job_id, claim_id, policy_id)
+    except Retry:
+        raise  # arq's own signal to redeliver; not a failure
     except LLMUnavailableError as e:
-        # Configuration problem, not a transient failure. Say so plainly and do
-        # not retry: no amount of retrying conjures an API key.
+        # Configuration, not a transient fault. Retrying cannot conjure a key.
         print(f"Audit aborted for claim {claim_id}: {e}")
         await _mark_claim(claim_id, ClaimStatus.LLM_UNAVAILABLE, reason=str(e))
         await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "error",
-            "message": str(e),
+            "type": "progress", "status": "error", "message": str(e),
             "claim_id": claim_id, "progress_pct": 0,
         })
         return {"status": "error", "reason": "llm_unavailable", "message": str(e)}
@@ -90,177 +105,190 @@ async def audit_claim_task(ctx, claim_id: str, policy_id: str):
 
 async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
     print(f"Starting audit for claim {claim_id} against policy {policy_id}")
+
+    # --- prerequisites, checked once, never polled --------------------------
+    async with AsyncSessionLocal() as session:
+        claim = (
+            await session.execute(select(Claim).where(Claim.id == claim_id))
+        ).scalars().first()
+
+        if claim is None:
+            return {"status": "error", "message": "Claim not found."}
+
+        if claim.status in (ClaimStatus.RECEIVED, ClaimStatus.EXTRACTING):
+            # Extraction is still running. Record which policy to use and stand
+            # down; extract_bill_task enqueues this again when it finishes.
+            claim.policy_id = claim.policy_id or policy_id
+            await session.commit()
+            await _publish_progress(ctx, job_id, {
+                "type": "progress", "status": "running",
+                "message": "Waiting for the bill to finish extracting; the audit "
+                           "will start automatically.",
+                "claim_id": claim_id, "progress_pct": 3,
+            })
+            print(f"Claim {claim_id} is still extracting; audit deferred to that job.")
+            return {"status": "deferred", "reason": "extraction_in_progress"}
+
+        if claim.status in (ClaimStatus.FAILED, ClaimStatus.LLM_UNAVAILABLE):
+            message = f"Claim is {claim.status.value}; fix the cause and re-run."
+            return {"status": "error", "reason": "claim_failed", "message": message}
+
+    # Policy ingestion runs concurrently and may still be embedding. That is
+    # transient, so ask arq to redeliver rather than sleeping inside the worker.
+    async with AsyncSessionLocal() as session:
+        chunk_count = await session.scalar(
+            select(func.count()).select_from(DocumentChunk).where(
+                DocumentChunk.policy_id == policy_id
+            )
+        )
+
+    if not chunk_count:
+        attempt = ctx.get("job_try", 1)
+        if attempt <= MAX_INDEX_WAITS:
+            await _publish_progress(ctx, job_id, {
+                "type": "progress", "status": "running",
+                "message": "Waiting for the policy to finish indexing...",
+                "claim_id": claim_id, "progress_pct": 4,
+            })
+            print(f"Policy {policy_id} has no passages yet; redelivering (try {attempt}).")
+            raise Retry(defer=attempt * 5)
+
+        reason = ("The policy has no indexed passages, so the claim cannot be "
+                  "adjudicated against it.")
+        await _mark_claim(claim_id, ClaimStatus.FAILED, reason=reason)
+        await _publish_progress(ctx, job_id, {
+            "type": "progress", "status": "error", "message": reason,
+            "claim_id": claim_id, "progress_pct": 0,
+        })
+        return {"status": "error", "message": reason}
+
+    # --- adjudicate ---------------------------------------------------------
+    async with AsyncSessionLocal() as session:
+        claim = await session.get(Claim, claim_id)
+        claim.policy_id = policy_id
+        await claim_state.transition(
+            session, claim, ClaimStatus.AUDITING,
+            detail=f"Against policy {policy_id}.",
+        )
+        await session.commit()
+
     await _publish_progress(ctx, job_id, {
         "type": "progress", "status": "started", "message": "Starting claim audit...",
-        "claim_id": claim_id, "progress_pct": 0
+        "claim_id": claim_id, "progress_pct": 5,
     })
 
-    # Wait for the bill extraction job to finish.
-    #
-    # Each poll uses its own session on purpose. Polling inside one long-lived
-    # session never observes the other worker's commit: the open transaction keeps
-    # its original snapshot, and SQLAlchemy's identity map keeps returning the
-    # first-loaded Claim with its stale status.
-    bill_ready = False
-    for attempt in range(_WAIT_ATTEMPTS):
-        async with AsyncSessionLocal() as poll_session:
-            result = await poll_session.execute(
-                select(Claim).where(Claim.id == claim_id)
-            )
-            claim = result.scalars().first()
-            status = claim.status if claim else None
-
-        if status == ClaimStatus.EXTRACTED:
-            bill_ready = True
-            break
-        if status in (ClaimStatus.FAILED, ClaimStatus.LLM_UNAVAILABLE):
-            break
-
-        await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "running",
-            "message": "Waiting for medical bill extraction...",
-            "claim_id": claim_id,
-            "progress_pct": int((attempt / _WAIT_ATTEMPTS) * 3),
-        })
-        await asyncio.sleep(_WAIT_INTERVAL_SECONDS)
-
-    if not bill_ready:
-        await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "error",
-            "message": "Bill extraction did not complete in time.",
-            "claim_id": claim_id, "progress_pct": 0,
-        })
-        return {"status": "error", "message": "Bill extraction did not complete."}
-
-    # Wait for policy ingestion. Without this the RAG retriever searches an
-    # empty chunk table and every finding cites "no relevant policy clause".
-    policy_ready = False
-    for attempt in range(_WAIT_ATTEMPTS):
-        async with AsyncSessionLocal() as poll_session:
-            chunk_count = await poll_session.scalar(
-                select(func.count()).select_from(DocumentChunk).where(
-                    DocumentChunk.policy_id == policy_id
-                )
-            )
-        if chunk_count and chunk_count > 0:
-            policy_ready = True
-            break
-
-        await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "running",
-            "message": "Waiting for policy ingestion (embedding the policy document)...",
-            "claim_id": claim_id,
-            "progress_pct": 3 + int((attempt / _WAIT_ATTEMPTS) * 2),
-        })
-        await asyncio.sleep(_WAIT_INTERVAL_SECONDS)
-
-    if not policy_ready:
-        await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "error",
-            "message": "Policy ingestion did not complete in time. Cannot audit without policy context.",
-            "claim_id": claim_id, "progress_pct": 0,
-        })
-        return {"status": "error", "message": "Policy ingestion did not complete."}
-
     async with AsyncSessionLocal() as session:
-        # Fetch all claim items for this claim
-        result = await session.execute(
-            select(ClaimItem).where(ClaimItem.claim_id == claim_id)
-        )
-        claim_items = result.scalars().all()
+        claim_items = (
+            await session.execute(
+                select(ClaimItem)
+                .where(ClaimItem.claim_id == claim_id)
+                .order_by(ClaimItem.line_number)
+            )
+        ).scalars().all()
 
         if not claim_items:
-            print(f"No items found for claim {claim_id}")
+            reason = "No line items were extracted, so there is nothing to audit."
             await _publish_progress(ctx, job_id, {
-                "type": "progress", "status": "error", "message": "No claim items found. Bill extraction failed."
+                "type": "progress", "status": "error", "message": reason,
+                "claim_id": claim_id, "progress_pct": 0,
             })
-            return {"status": "error", "message": "No claim items found."}
+            await _mark_claim(claim_id, ClaimStatus.FAILED, reason=reason)
+            return {"status": "error", "message": reason}
+
+        # Idempotency: clear prior verdicts so a re-run replaces rather than
+        # duplicates. The unique constraint on claim_item_id rejects the second
+        # insert otherwise, which is precisely why it exists.
+        #
+        # Issued as a bulk DELETE rather than by deleting loaded objects: the
+        # unit of work is free to order object-level deletes after the inserts
+        # in the same flush, which is exactly the collision being avoided.
+        await session.execute(
+            delete(AuditFinding).where(
+                AuditFinding.claim_item_id.in_([item.id for item in claim_items])
+            )
+        )
+        await session.flush()
 
         total = len(claim_items)
-        audit_findings = []
-
         await _publish_progress(ctx, job_id, {
             "type": "progress", "status": "running",
-            "message": f"Found {total} items to audit.", "progress_pct": 5
+            "message": f"Found {total} items to audit.", "progress_pct": 5,
         })
 
-        # Process each item sequentially to avoid overwhelming the LLM rate limit
-        for idx, item in enumerate(claim_items, 1):
+        findings = 0
+        for index, item in enumerate(claim_items, start=1):
             print(f"Auditing item: {item.category} - {item.description}")
             await _publish_progress(ctx, job_id, {
                 "type": "progress", "status": "running",
-                "message": f"Auditing item {idx}/{total}: {item.category} - {item.description}",
-                "progress_pct": int(5 + (idx / total) * 85)
+                "message": f"Auditing item {index}/{total}: {item.category} - {item.description}",
+                "progress_pct": int(5 + (index / total) * 85),
             })
-            
-            # Call our Claim Auditor agent
-            llm_decision = await audit_claim_item(item=item, policy_id=policy_id)
 
-            # Create the AuditFinding record
-            finding = AuditFinding(
-                claim_item_id=item.id,
-                chunk_id=llm_decision.get("chunk_id"),
-                status=_coerce_status(llm_decision.get("status")),
-                reason=llm_decision.get("reason", "No reason provided."),
-                policy_clause_cited=llm_decision.get("policy_clause_cited"),
-                original_clause_text=llm_decision.get("original_clause_text"),
-                page_number=_coerce_page(llm_decision.get("page_number")),
-                capped_amount=_coerce_float(llm_decision.get("capped_amount")),
-                confidence=_coerce_float(llm_decision.get("confidence")) or 0.0,
+            decision = await audit_claim_item(item=item, policy_id=policy_id)
+
+            session.add(
+                AuditFinding(
+                    claim_item_id=item.id,
+                    chunk_id=decision.get("chunk_id"),
+                    status=_coerce_status(decision.get("status")),
+                    reason=decision.get("reason", "No reason provided."),
+                    policy_clause_cited=decision.get("policy_clause_cited"),
+                    original_clause_text=decision.get("original_clause_text"),
+                    page_number=_coerce_page(decision.get("page_number")),
+                    capped_amount=_coerce_float(decision.get("capped_amount")),
+                    confidence=_coerce_float(decision.get("confidence")) or 0.0,
+                )
             )
-            
-            # Add to session
-            session.add(finding)
-            audit_findings.append(finding)
+            findings += 1
 
-            # Sleep briefly to respect API rate limits (just in case)
+            # Paced to stay inside the provider's rate limit.
             await asyncio.sleep(0.5)
-        
+
         await session.flush()
 
-        # --- risk ----------------------------------------------------------
-        # Computed from what the pipeline actually found: the line items, the
-        # verdicts just written, the located facts and the policy. Deterministic
-        # and reproducible — no model involved.
         await _publish_progress(ctx, job_id, {
             "type": "progress", "status": "running",
             "message": "Scoring risk signals...", "progress_pct": 92,
         })
-
         scored = await _score_risk(session, claim_id, policy_id)
 
-        # Update the parent claim status
         claim = await session.get(Claim, claim_id)
-        if claim:
-            claim.status = ClaimStatus.AUDIT_COMPLETE
-            
-        await session.commit()
-        print(f"Audit completed for claim {claim_id}. {len(audit_findings)} findings saved.")
-        
-        await _publish_progress(ctx, job_id, {
-            "type": "progress", "status": "completed",
-            "message": (
-                f"Audit complete. {len(audit_findings)} findings, "
-                f"risk {scored['score']:.0f}/100 ({scored['band']})."
-            ),
-            "progress_pct": 100,
-            "total_items_audited": len(audit_findings),
-            "risk_score": scored["score"],
-            "risk_band": scored["band"],
-        })
+        await claim_state.transition(
+            session, claim, ClaimStatus.AUDIT_COMPLETE,
+            summary=f"Adjudicated {findings} line item(s)",
+            payload={"findings": findings, **scored},
+        )
+        await claim_state.record(
+            session, claim,
+            kind=EventKind.AI_FINDING,
+            summary=f"Risk scored {scored['score']:.0f}/100 ({scored['band']})",
+            detail=f"{scored['signals']} rule(s) fired.",
+            payload=scored,
+        )
 
-        return {
-            "status": "success",
-            "total_items_audited": len(audit_findings),
-            "risk": scored,
-        }
+        await session.commit()
+
+    print(f"Audit completed for claim {claim_id}. {findings} findings saved.")
+    await _publish_progress(ctx, job_id, {
+        "type": "progress", "status": "completed",
+        "message": (
+            f"Audit complete. {findings} findings, "
+            f"risk {scored['score']:.0f}/100 ({scored['band']})."
+        ),
+        "progress_pct": 100,
+        "total_items_audited": findings,
+        "risk_score": scored["score"],
+        "risk_band": scored["band"],
+    })
+
+    return {"status": "success", "total_items_audited": findings, "risk": scored}
 
 
 async def _score_risk(session, claim_id: str, policy_id: str) -> dict:
     """Run the rules engine and persist its signals and score.
 
-    Previous signals for the claim are cleared first: re-auditing should replace
-    the assessment, not accumulate a second copy of every rule that fired.
+    Previous signals and scores are cleared first: re-auditing replaces the
+    assessment rather than accumulating a second copy of every rule that fired.
     """
     items = (
         await session.execute(
@@ -279,16 +307,14 @@ async def _score_risk(session, claim_id: str, policy_id: str) -> dict:
     claim = await session.get(Claim, claim_id)
     policy = await session.get(Policy, policy_id)
 
-    existing = (
-        await session.execute(select(RiskSignal).where(RiskSignal.claim_id == claim_id))
-    ).scalars().all()
-    for stale in existing:
-        await session.delete(stale)
+    # Same reasoning as the findings above: replace, and do it with statements
+    # whose ordering relative to the inserts is not left to the unit of work.
+    await session.execute(delete(RiskSignal).where(RiskSignal.claim_id == claim_id))
+    await session.execute(delete(RiskScore).where(RiskScore.claim_id == claim_id))
     await session.flush()
 
     signals = risk_engine.evaluate(claim, list(items), list(facts), policy)
     total, band, breakdown = risk_engine.score(signals)
-
     version = await _rules_version(session)
 
     for signal in signals:

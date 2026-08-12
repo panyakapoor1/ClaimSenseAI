@@ -1,8 +1,9 @@
+import datetime
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from models.enums import DocumentKind, DocumentStatus, FactKind
+from models.enums import DocumentKind, DocumentStatus, EventKind, FactKind
 
 
 class Region(BaseModel):
@@ -79,3 +80,28 @@ class EvidenceResponse(BaseModel):
     claim_id: uuid.UUID
     documents: list[DocumentOut]
     facts: list[FactOut]
+
+
+class TimelineEvent(BaseModel):
+    """One entry in the claim's history.
+
+    Written by the state machine and the pipeline as things happen, so the
+    timeline is a record rather than a reconstruction.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: EventKind
+    summary: str
+    detail: str | None
+    occurred_at: datetime.datetime
+    actor_name: str | None = Field(
+        default=None, description="Who did this, when a person did."
+    )
+    payload: dict | None = None
+
+
+class TimelineResponse(BaseModel):
+    claim_id: uuid.UUID
+    events: list[TimelineEvent]

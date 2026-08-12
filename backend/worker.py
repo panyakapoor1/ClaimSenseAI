@@ -39,7 +39,21 @@ class WorkerSettings:
     functions = [extract_bill_task, ingest_policy_task, audit_claim_task, generate_appeal_task]
     redis_settings = get_redis_settings()
     on_startup = startup
+
+    # Retries cover transient faults: a provider blip, a database failover, a
+    # policy still indexing. Terminal conditions — no API key, an unreadable
+    # document — are caught inside the tasks and returned rather than raised,
+    # so they consume no attempts and the claim reaches a final state at once.
+    max_tries = 4
+
+    # Kills a job that has genuinely hung rather than letting it hold a worker
+    # slot forever. Comfortably above a real audit of a long bill.
+    job_timeout = 900
+
+    # Completed job results are kept briefly so a caller polling by job id gets
+    # an answer, without the queue growing without bound.
+    keep_result = 900
     on_shutdown = shutdown
-    # Increase timeout for embedding generation (large PDFs can take time)
+    # Bounded so several concurrent audits cannot saturate the CPU that the
+    # embedding and reranking models need.
     max_jobs = 5
-    job_timeout = 600
