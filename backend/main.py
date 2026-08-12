@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import ErrorResponse, register_exception_handlers
+from api.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 from api.ops import router as ops_router
 from api.v1 import api_router
 from api.ws import router as ws_router
@@ -64,7 +65,10 @@ app = FastAPI(
     responses={
         400: {"model": ErrorResponse, "description": "Malformed request"},
         404: {"model": ErrorResponse, "description": "Resource does not exist"},
+        401: {"model": ErrorResponse, "description": "Not signed in"},
+        403: {"model": ErrorResponse, "description": "Signed in, but not permitted"},
         409: {"model": ErrorResponse, "description": "Conflicts with current state"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
         422: {"model": ErrorResponse, "description": "Validation failed"},
         500: {"model": ErrorResponse, "description": "Unexpected server error"},
         503: {"model": ErrorResponse, "description": "A dependency is unavailable"},
@@ -73,6 +77,8 @@ app = FastAPI(
 
 # Order matters: the request id must be set before anything that records it, and
 # metrics must wrap the handler to time it.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(

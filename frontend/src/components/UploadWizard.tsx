@@ -141,6 +141,7 @@ export default function UploadWizard() {
 
       const policyRes = await fetch(`${API_V1}/policies`, {
         method: 'POST',
+        credentials: 'include',
         body: policyFormData,
       });
       if (!policyRes.ok) throw new Error(await readError(policyRes, 'Could not upload the policy.'));
@@ -152,6 +153,7 @@ export default function UploadWizard() {
 
       const billRes = await fetch(`${API_V1}/claims`, {
         method: 'POST',
+        credentials: 'include',
         body: billFormData,
       });
       if (!billRes.ok) throw new Error(await readError(billRes, 'Could not upload the bill.'));
@@ -160,6 +162,7 @@ export default function UploadWizard() {
       // 3. Adjudicate the claim against that policy.
       const auditRes = await fetch(`${API_V1}/claims/${billData.claim_id}/audit`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ policy_id: policyData.policy_id }),
       });

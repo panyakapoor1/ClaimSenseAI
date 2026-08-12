@@ -7,14 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.errors import NotFoundError
-from core.bootstrap import ensure_demo_tenant
-from models import Document, DocumentKind, Policy
+from models import Document, DocumentKind, Policy, User
 from services.claims import store_upload, validate_upload
 
 
 async def create_policy_from_upload(
     session: AsyncSession,
     *,
+    owner: User,
     filename: str,
     content_type: str | None,
     payload: bytes,
@@ -23,11 +23,10 @@ async def create_policy_from_upload(
 ) -> tuple[Policy, Document]:
     validate_upload(filename, content_type, payload)
 
-    org, _user = await ensure_demo_tenant(session)
     storage_key = await store_upload(filename, payload)
 
     policy = Policy(
-        organization_id=org.id,
+        organization_id=owner.organization_id,
         insurer_name=insurer_name,
         policy_name=policy_name,
     )
@@ -35,7 +34,7 @@ async def create_policy_from_upload(
     await session.flush()
 
     document = Document(
-        organization_id=org.id,
+        organization_id=owner.organization_id,
         policy_id=policy.id,
         kind=DocumentKind.POLICY,
         filename=filename,
@@ -50,16 +49,27 @@ async def create_policy_from_upload(
     return policy, document
 
 
-async def list_policies(session: AsyncSession) -> list[Policy]:
+async def list_policies(
+    session: AsyncSession, *, organization_id: uuid.UUID
+) -> list[Policy]:
     return list(
-        (await session.execute(select(Policy).order_by(Policy.created_at.desc())))
+        (
+            await session.execute(
+                select(Policy)
+                .where(Policy.organization_id == organization_id)
+                .order_by(Policy.created_at.desc())
+            )
+        )
         .scalars()
         .all()
     )
 
 
-async def get_policy(session: AsyncSession, policy_id: uuid.UUID) -> Policy:
+async def get_policy(
+    session: AsyncSession, policy_id: uuid.UUID, *, organization_id: uuid.UUID
+) -> Policy:
+    """Another organization's policy reports as missing, not forbidden."""
     policy = await session.get(Policy, policy_id)
-    if policy is None:
+    if policy is None or policy.organization_id != organization_id:
         raise NotFoundError(f"No policy with id {policy_id}.")
     return policy

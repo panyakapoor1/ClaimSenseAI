@@ -1,12 +1,16 @@
 import Link from 'next/link';
 import { FileText, ArrowRight } from 'lucide-react';
 import { API_V1_SERVER } from '@/lib/api';
+import { authHeaders } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 async function getClaims() {
   try {
-    const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error('Failed to fetch claims');
     return (await res.json()).items;
   } catch (err) {

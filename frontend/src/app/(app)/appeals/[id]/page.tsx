@@ -2,12 +2,16 @@ import Link from 'next/link';
 import { ArrowLeft, FileText, CheckCircle2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { API_V1_SERVER } from '@/lib/api';
+import { authHeaders } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 async function getAppeal(id: string) {
   try {
-    const res = await fetch(`${API_V1_SERVER}/claims/${id}/appeal`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}/appeal`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
     if (!res.ok) {
       if (res.status === 404) return null;
       throw new Error('Failed to fetch appeal');

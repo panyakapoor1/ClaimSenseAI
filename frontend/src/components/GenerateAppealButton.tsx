@@ -14,7 +14,10 @@ export default function GenerateAppealButton({ claimId }: { claimId: string }) {
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const res = await fetch(`${API_V1}/claims/${claimId}/appeal`, { method: 'POST' });
+      const res = await fetch(`${API_V1}/claims/${claimId}/appeal`, {
+        method: 'POST',
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error(await readError(res, 'Could not start appeal generation.'));
       const data = await res.json();
       setJobId(data.job_id);

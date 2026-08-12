@@ -1,8 +1,8 @@
 import uuid
 
-from fastapi import APIRouter, File, Query, UploadFile, status
+from fastapi import APIRouter, File, Request, UploadFile, status
 
-from api.deps import PaginationDep, QueueDep, SessionDep
+from api.deps import PaginationDep, QueueDep, SessionDep, requires
 from api.errors import DependencyUnavailableError, NotFoundError
 from schemas import (
     AppealOut,
@@ -16,10 +16,12 @@ from schemas import (
     RiskSignalOut,
     StartAuditRequest,
 )
+from services import auth as auth_service
 from services import claims as claim_service
+from services.audit import record_audit
 from sqlalchemy import select
 
-from models import AppealDocument
+from models import AppealDocument, User
 
 router = APIRouter(prefix="/claims", tags=["claims"])
 
@@ -29,9 +31,16 @@ router = APIRouter(prefix="/claims", tags=["claims"])
     response_model=Page[ClaimSummary],
     summary="List claims, newest first",
 )
-async def list_claims(session: SessionDep, page: PaginationDep):
+async def list_claims(
+    session: SessionDep,
+    page: PaginationDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
     items, next_cursor, has_more = await claim_service.list_claims(
-        session, limit=page.limit, cursor=page.cursor
+        session,
+        organization_id=user.organization_id,
+        limit=page.limit,
+        cursor=page.cursor,
     )
     return Page[ClaimSummary](
         items=[ClaimSummary.model_validate(c) for c in items],
@@ -50,10 +59,25 @@ async def list_claims(session: SessionDep, page: PaginationDep):
         "immediately; follow progress on the returned job id."
     ),
 )
-async def create_claim(session: SessionDep, queue: QueueDep, file: UploadFile = File(...)):
+async def create_claim(
+    request: Request,
+    session: SessionDep,
+    queue: QueueDep,
+    file: UploadFile = File(...),
+    user: User = requires(auth_service.CREATE_CLAIMS),
+):
     payload = await file.read()
     claim, document = await claim_service.create_claim_from_bill(
-        session, filename=file.filename, content_type=file.content_type, payload=payload
+        session,
+        owner=user,
+        filename=file.filename,
+        content_type=file.content_type,
+        payload=payload,
+    )
+
+    await record_audit(
+        session, actor=user, action="claim.create", entity_type="claim",
+        entity_id=str(claim.id), after={"reference": claim.reference}, request=request,
     )
 
     # Committed before enqueuing: a worker that picks the job up first would not
@@ -77,8 +101,14 @@ async def create_claim(session: SessionDep, queue: QueueDep, file: UploadFile = 
     response_model=ClaimDetail,
     summary="A claim with its line items, findings and risk breakdown",
 )
-async def get_claim(claim_id: uuid.UUID, session: SessionDep):
-    claim = await claim_service.get_claim_detail(session, claim_id)
+async def get_claim(
+    claim_id: uuid.UUID,
+    session: SessionDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
+    claim = await claim_service.get_claim_detail(
+        session, claim_id, organization_id=user.organization_id
+    )
     risk = claim_service.latest_risk_score(claim)
 
     return ClaimDetail(
@@ -122,13 +152,25 @@ async def get_claim(claim_id: uuid.UUID, session: SessionDep):
     summary="Adjudicate a claim against a policy",
 )
 async def start_audit(
-    claim_id: uuid.UUID, body: StartAuditRequest, session: SessionDep, queue: QueueDep
+    claim_id: uuid.UUID,
+    body: StartAuditRequest,
+    request: Request,
+    session: SessionDep,
+    queue: QueueDep,
+    user: User = requires(auth_service.RUN_ANALYSIS),
 ):
-    await claim_service.assert_auditable(session, claim_id, body.policy_id)
+    await claim_service.assert_auditable(
+        session, claim_id, body.policy_id, organization_id=user.organization_id
+    )
 
     job = await queue.enqueue_job("audit_claim_task", str(claim_id), str(body.policy_id))
     if job is None:
         raise DependencyUnavailableError("Could not queue the audit.")
+
+    await record_audit(
+        session, actor=user, action="claim.audit.start", entity_type="claim",
+        entity_id=str(claim_id), after={"policy_id": str(body.policy_id)}, request=request,
+    )
     return JobAccepted(job_id=job.job_id)
 
 
@@ -138,12 +180,25 @@ async def start_audit(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Draft an appeal for the disputed lines",
 )
-async def start_appeal(claim_id: uuid.UUID, session: SessionDep, queue: QueueDep):
-    await claim_service.assert_appealable(session, claim_id)
+async def start_appeal(
+    claim_id: uuid.UUID,
+    request: Request,
+    session: SessionDep,
+    queue: QueueDep,
+    user: User = requires(auth_service.RUN_ANALYSIS),
+):
+    await claim_service.assert_appealable(
+        session, claim_id, organization_id=user.organization_id
+    )
 
     job = await queue.enqueue_job("generate_appeal_task", str(claim_id))
     if job is None:
         raise DependencyUnavailableError("Could not queue appeal generation.")
+
+    await record_audit(
+        session, actor=user, action="claim.appeal.start", entity_type="claim",
+        entity_id=str(claim_id), request=request,
+    )
     return JobAccepted(job_id=job.job_id)
 
 
@@ -152,7 +207,17 @@ async def start_appeal(claim_id: uuid.UUID, session: SessionDep, queue: QueueDep
     response_model=AppealOut,
     summary="Fetch the drafted appeal letter",
 )
-async def get_appeal(claim_id: uuid.UUID, session: SessionDep):
+async def get_appeal(
+    claim_id: uuid.UUID,
+    session: SessionDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
+    # Scope-checks the claim first, so another organization's appeal is not
+    # readable by guessing a claim id.
+    await claim_service.get_claim_detail(
+        session, claim_id, organization_id=user.organization_id
+    )
+
     appeal = (
         await session.execute(
             select(AppealDocument).where(AppealDocument.claim_id == claim_id)

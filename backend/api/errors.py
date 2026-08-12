@@ -52,6 +52,31 @@ class ValidationError(APIError):
     message = "The request was not valid."
 
 
+class UnauthenticatedError(APIError):
+    status_code = 401
+    code = "unauthenticated"
+    message = "Authentication is required."
+
+
+class ForbiddenError(APIError):
+    """Authenticated, but not permitted.
+
+    Distinct from 401 on purpose: the client should not retry with different
+    credentials, and the UI should say "you cannot do this" rather than
+    bouncing the user back to a login screen they just came from.
+    """
+
+    status_code = 403
+    code = "forbidden"
+    message = "You do not have permission to perform this action."
+
+
+class RateLimitedError(APIError):
+    status_code = 429
+    code = "rate_limited"
+    message = "Too many requests. Please slow down."
+
+
 class ConflictError(APIError):
     status_code = 409
     code = "conflict"

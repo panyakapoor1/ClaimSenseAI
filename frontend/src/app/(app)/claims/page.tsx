@@ -1,13 +1,17 @@
 import Link from 'next/link';
 import { ArrowRight, FileCheck2 } from 'lucide-react';
 import { API_V1_SERVER } from '@/lib/api';
+import { authHeaders } from '@/lib/session';
 import { formatCurrency, presentStatus, TONE_CLASS, type Claim } from '@/lib/claimStatus';
 
 export const dynamic = 'force-dynamic';
 
 async function getClaims(): Promise<Claim[]> {
   try {
-    const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error(`API responded ${res.status}`);
     return (await res.json()).items;
   } catch (err) {

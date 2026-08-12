@@ -1,0 +1,7 @@
+# Heavy ML dependencies, isolated in their own Docker layer.
+#
+# These pull transformers, scikit-learn, scipy and numpy — several hundred MB
+# that take minutes to install. Keeping them separate from requirements.txt
+# means adding an ordinary dependency rebuilds in seconds instead of
+# re-downloading this entire tree.
+sentence-transformers==3.0.1

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, AlertTriangle, FileText, Quote } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
 import { API_V1_SERVER } from '@/lib/api';
+import { authHeaders } from '@/lib/session';
 import {
   ADJUDICATION,
   formatCurrency,
@@ -57,7 +58,10 @@ type ClaimDetail = {
 
 async function getClaimDetails(id: string): Promise<ClaimDetail | null> {
   try {
-    const res = await fetch(`${API_V1_SERVER}/claims/${id}`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`API responded ${res.status}`);
     return await res.json();

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.errors import ConflictError, NotFoundError, ValidationError
-from core.bootstrap import ensure_demo_tenant, new_claim_reference
+from core.bootstrap import new_claim_reference
 from models import (
     Claim,
     ClaimItem,
@@ -24,6 +24,7 @@ from models import (
     Policy,
     RiskScore,
     RiskSignal,
+    User,
 )
 from schemas.common import decode_cursor, encode_cursor
 
@@ -72,16 +73,20 @@ async def store_upload(filename: str, payload: bytes) -> str:
 
 
 async def create_claim_from_bill(
-    session: AsyncSession, *, filename: str, content_type: str | None, payload: bytes
+    session: AsyncSession,
+    *,
+    owner: User,
+    filename: str,
+    content_type: str | None,
+    payload: bytes,
 ) -> tuple[Claim, Document]:
     validate_upload(filename, content_type, payload)
 
-    org, user = await ensure_demo_tenant(session)
     storage_key = await store_upload(filename, payload)
 
     claim = Claim(
-        organization_id=org.id,
-        created_by_id=user.id if user else None,
+        organization_id=owner.organization_id,
+        created_by_id=owner.id,
         reference=new_claim_reference(),
         total_billed=0.0,
         status=ClaimStatus.RECEIVED,
@@ -90,7 +95,7 @@ async def create_claim_from_bill(
     await session.flush()
 
     document = Document(
-        organization_id=org.id,
+        organization_id=owner.organization_id,
         claim_id=claim.id,
         kind=DocumentKind.BILL,
         filename=filename,
@@ -106,10 +111,23 @@ async def create_claim_from_bill(
 
 
 async def list_claims(
-    session: AsyncSession, *, limit: int = 25, cursor: str | None = None
+    session: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    limit: int = 25,
+    cursor: str | None = None,
 ) -> tuple[list[Claim], str | None, bool]:
-    """Newest-first page of claims, anchored on (created_at, id)."""
-    query = select(Claim).order_by(Claim.created_at.desc(), Claim.id.desc())
+    """Newest-first page of claims belonging to one organization.
+
+    The organization filter is a required argument rather than an optional one:
+    a caller cannot forget to scope the query, because there is no unscoped form
+    of this function to call by accident.
+    """
+    query = (
+        select(Claim)
+        .where(Claim.organization_id == organization_id)
+        .order_by(Claim.created_at.desc(), Claim.id.desc())
+    )
 
     if cursor:
         try:
@@ -134,8 +152,15 @@ async def list_claims(
     return items, next_cursor, has_more
 
 
-async def get_claim_detail(session: AsyncSession, claim_id: uuid.UUID) -> Claim:
-    """A claim with items, findings, risk and related parties in one round trip."""
+async def get_claim_detail(
+    session: AsyncSession, claim_id: uuid.UUID, *, organization_id: uuid.UUID
+) -> Claim:
+    """A claim with items, findings, risk and related parties in one round trip.
+
+    A claim owned by another organization reports as missing rather than
+    forbidden: answering 403 would confirm the id exists, letting an outsider
+    enumerate which claims are real.
+    """
     claim = (
         await session.execute(
             select(Claim)
@@ -146,7 +171,7 @@ async def get_claim_detail(session: AsyncSession, claim_id: uuid.UUID) -> Claim:
                 selectinload(Claim.risk_signals),
                 selectinload(Claim.risk_scores),
             )
-            .where(Claim.id == claim_id)
+            .where(Claim.id == claim_id, Claim.organization_id == organization_id)
         )
     ).scalars().first()
 
@@ -168,22 +193,31 @@ def sorted_signals(claim: Claim) -> list[RiskSignal]:
 
 
 async def assert_auditable(
-    session: AsyncSession, claim_id: uuid.UUID, policy_id: uuid.UUID
+    session: AsyncSession,
+    claim_id: uuid.UUID,
+    policy_id: uuid.UUID,
+    *,
+    organization_id: uuid.UUID,
 ) -> None:
     """Fail fast before enqueuing an audit that cannot possibly succeed.
 
     The prototype enqueued unconditionally, so a bad policy id surfaced minutes
     later as a worker traceback and a websocket that closed with no explanation.
     """
-    if (await session.get(Claim, claim_id)) is None:
+    claim = await session.get(Claim, claim_id)
+    if claim is None or claim.organization_id != organization_id:
         raise NotFoundError(f"No claim with id {claim_id}.")
-    if (await session.get(Policy, policy_id)) is None:
+
+    policy = await session.get(Policy, policy_id)
+    if policy is None or policy.organization_id != organization_id:
         raise NotFoundError(f"No policy with id {policy_id}.")
 
 
-async def assert_appealable(session: AsyncSession, claim_id: uuid.UUID) -> Claim:
+async def assert_appealable(
+    session: AsyncSession, claim_id: uuid.UUID, *, organization_id: uuid.UUID
+) -> Claim:
     claim = await session.get(Claim, claim_id)
-    if claim is None:
+    if claim is None or claim.organization_id != organization_id:
         raise NotFoundError(f"No claim with id {claim_id}.")
     if claim.status not in (ClaimStatus.AUDIT_COMPLETE, ClaimStatus.APPEAL_GENERATED):
         raise ConflictError(

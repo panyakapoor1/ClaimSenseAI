@@ -1,18 +1,27 @@
 import uuid
 
-from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile, status
 
-from api.deps import QueueDep, SessionDep
+from api.deps import QueueDep, SessionDep, requires
 from api.errors import DependencyUnavailableError
 from schemas import ClauseMatch, ClauseSearchResponse, PolicyCreated, PolicySummary
+from models import User
+from services import auth as auth_service
 from services import policies as policy_service
+from services.audit import record_audit
 
 router = APIRouter(prefix="/policies", tags=["policies"])
 
 
 @router.get("", response_model=list[PolicySummary], summary="List ingested policies")
-async def list_policies(session: SessionDep):
-    return [PolicySummary.model_validate(p) for p in await policy_service.list_policies(session)]
+async def list_policies(
+    session: SessionDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
+    policies = await policy_service.list_policies(
+        session, organization_id=user.organization_id
+    )
+    return [PolicySummary.model_validate(p) for p in policies]
 
 
 @router.post(
@@ -23,15 +32,18 @@ async def list_policies(session: SessionDep):
     description="Accepts a policy PDF and queues clause extraction and embedding.",
 )
 async def create_policy(
+    request: Request,
     session: SessionDep,
     queue: QueueDep,
     file: UploadFile = File(...),
     insurer_name: str = Form("Unknown"),
     policy_name: str = Form("Unknown"),
+    user: User = requires(auth_service.MANAGE_POLICIES),
 ):
     payload = await file.read()
     policy, document = await policy_service.create_policy_from_upload(
         session,
+        owner=user,
         filename=file.filename,
         content_type=file.content_type,
         payload=payload,
@@ -39,6 +51,10 @@ async def create_policy(
         policy_name=policy_name,
     )
 
+    await record_audit(
+        session, actor=user, action="policy.create", entity_type="policy",
+        entity_id=str(policy.id), after={"insurer": insurer_name}, request=request,
+    )
     await session.commit()
 
     job = await queue.enqueue_job("ingest_policy_task", str(policy.id), str(document.id))
@@ -58,10 +74,11 @@ async def search_clauses(
     session: SessionDep,
     q: str = Query(min_length=2, description="Natural-language question or item description."),
     top_k: int = Query(5, ge=1, le=25),
+    user: User = requires(auth_service.READ_CLAIMS),
 ):
     # Confirms the policy exists so an unknown id is a 404 rather than an
     # empty result set that reads as "this policy has no matching clauses".
-    await policy_service.get_policy(session, policy_id)
+    await policy_service.get_policy(session, policy_id, organization_id=user.organization_id)
 
     from agents.rag_retriever import search_policy_chunks
 

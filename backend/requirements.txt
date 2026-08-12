@@ -1,3 +1,5 @@
+# Application dependencies. Heavy ML packages live in requirements-ml.txt so
+# that adding one of these does not trigger a multi-minute rebuild.
 fastapi==0.110.0
 uvicorn[standard]==0.29.0
 sqlalchemy==2.0.29
@@ -13,6 +15,8 @@ groq==0.5.0
 python-multipart==0.0.9
 pdfplumber==0.11.0
 httpx==0.27.2
-sentence-transformers==3.0.1
 pytest==8.3.3
 pytest-asyncio==0.24.0
+bcrypt==4.2.0
+pyjwt==2.9.0
+email-validator==2.2.0
