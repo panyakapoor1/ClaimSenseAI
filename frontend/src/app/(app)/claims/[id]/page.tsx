@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, AlertTriangle, FileText, Quote } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
 import EvidencePanel, { type Evidence } from '@/components/EvidencePanel';
+import RiskPanel, { type Risk, type RiskSignal } from '@/components/RiskPanel';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
 import {
@@ -34,14 +35,6 @@ type Item = {
   audit: Finding | null;
 };
 
-type RiskSignal = {
-  code: string;
-  title: string;
-  detail: string;
-  direction: 'AGGRAVATING' | 'MITIGATING';
-  weight: number;
-};
-
 type ClaimDetail = {
   id: string;
   reference: string;
@@ -53,7 +46,7 @@ type ClaimDetail = {
   provider_name: string | null;
   failure_reason: string | null;
   items: Item[];
-  risk: { score: number; band: string; signal_count: number } | null;
+  risk: Risk | null;
   signals: RiskSignal[];
 };
 
@@ -155,6 +148,8 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </header>
+
+      <RiskPanel risk={claim.risk} signals={claim.signals} />
 
       {evidence && <EvidencePanel evidence={evidence} />}
 

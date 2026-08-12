@@ -1,7 +1,21 @@
 from sqlalchemy import func
 from sqlalchemy.future import select
 from core.database import AsyncSessionLocal
-from models import AdjudicationStatus, Claim, ClaimItem, ClaimStatus, DocumentChunk, AuditFinding
+from models import (
+    AdjudicationStatus,
+    AuditFinding,
+    Claim,
+    ClaimItem,
+    ClaimStatus,
+    DocumentChunk,
+    ExtractedFact,
+    ModelVersion,
+    Policy,
+    RiskScore,
+    RiskSignal,
+)
+from services import risk as risk_engine
+from sqlalchemy.orm import selectinload
 from agents.claim_auditor import audit_claim_item
 from core.llm import LLMUnavailableError
 from tasks.claim_status import mark_claim as _mark_claim
@@ -202,6 +216,19 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
             # Sleep briefly to respect API rate limits (just in case)
             await asyncio.sleep(0.5)
         
+        await session.flush()
+
+        # --- risk ----------------------------------------------------------
+        # Computed from what the pipeline actually found: the line items, the
+        # verdicts just written, the located facts and the policy. Deterministic
+        # and reproducible — no model involved.
+        await _publish_progress(ctx, job_id, {
+            "type": "progress", "status": "running",
+            "message": "Scoring risk signals...", "progress_pct": 92,
+        })
+
+        scored = await _score_risk(session, claim_id, policy_id)
+
         # Update the parent claim status
         claim = await session.get(Claim, claim_id)
         if claim:
@@ -212,8 +239,109 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
         
         await _publish_progress(ctx, job_id, {
             "type": "progress", "status": "completed",
-            "message": f"Audit complete. {len(audit_findings)} findings saved.",
-            "progress_pct": 100, "total_items_audited": len(audit_findings)
+            "message": (
+                f"Audit complete. {len(audit_findings)} findings, "
+                f"risk {scored['score']:.0f}/100 ({scored['band']})."
+            ),
+            "progress_pct": 100,
+            "total_items_audited": len(audit_findings),
+            "risk_score": scored["score"],
+            "risk_band": scored["band"],
         })
-        
-        return {"status": "success", "total_items_audited": len(audit_findings)}
+
+        return {
+            "status": "success",
+            "total_items_audited": len(audit_findings),
+            "risk": scored,
+        }
+
+
+async def _score_risk(session, claim_id: str, policy_id: str) -> dict:
+    """Run the rules engine and persist its signals and score.
+
+    Previous signals for the claim are cleared first: re-auditing should replace
+    the assessment, not accumulate a second copy of every rule that fired.
+    """
+    items = (
+        await session.execute(
+            select(ClaimItem)
+            .options(selectinload(ClaimItem.audit_finding))
+            .where(ClaimItem.claim_id == claim_id)
+        )
+    ).scalars().all()
+
+    facts = (
+        await session.execute(
+            select(ExtractedFact).where(ExtractedFact.claim_id == claim_id)
+        )
+    ).scalars().all()
+
+    claim = await session.get(Claim, claim_id)
+    policy = await session.get(Policy, policy_id)
+
+    existing = (
+        await session.execute(select(RiskSignal).where(RiskSignal.claim_id == claim_id))
+    ).scalars().all()
+    for stale in existing:
+        await session.delete(stale)
+    await session.flush()
+
+    signals = risk_engine.evaluate(claim, list(items), list(facts), policy)
+    total, band, breakdown = risk_engine.score(signals)
+
+    version = await _rules_version(session)
+
+    for signal in signals:
+        session.add(
+            RiskSignal(
+                claim_id=claim.id,
+                claim_item_id=signal.claim_item_id,
+                code=signal.code,
+                title=signal.title,
+                detail=signal.detail,
+                direction=signal.direction,
+                weight=signal.weight,
+                evidence_refs=signal.evidence_refs,
+            )
+        )
+
+    session.add(
+        RiskScore(
+            claim_id=claim.id,
+            model_version_id=version.id if version else None,
+            score=total,
+            band=band,
+            signal_count=len(signals),
+            breakdown=breakdown,
+        )
+    )
+
+    print(f"Risk for {claim_id}: {total:.1f} ({band.value}) from {len(signals)} signal(s)")
+    return {"score": total, "band": band.value, "signals": len(signals)}
+
+
+async def _rules_version(session) -> ModelVersion | None:
+    """The rules-engine version, recorded against every score it produces."""
+    identifier = risk_engine.WEIGHTS_VERSION
+    version = (
+        await session.execute(
+            select(ModelVersion).where(
+                ModelVersion.kind == "risk_rules", ModelVersion.identifier == identifier
+            )
+        )
+    ).scalars().first()
+
+    if version is None:
+        version = ModelVersion(
+            kind="risk_rules",
+            identifier=identifier,
+            provider="claimsense",
+            notes=(
+                "Deterministic rules engine. Signals are computed from claim data; "
+                "the weights are a stated policy, not learned parameters."
+            ),
+        )
+        session.add(version)
+        await session.flush()
+
+    return version
