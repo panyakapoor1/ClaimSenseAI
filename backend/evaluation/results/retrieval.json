@@ -1,0 +1,70 @@
+[
+  {
+    "configuration": "dense-only (baseline)",
+    "n": 42,
+    "recall_at_k": 0.9523809523809523,
+    "precision_at_1": 0.7857142857142857,
+    "mrr": 0.8611111111111112,
+    "median_latency_ms": 46.48427400024957,
+    "p95_latency_ms": 71.68759799969848,
+    "misses": [
+      {
+        "query": "clause 4.1",
+        "kind": "lexical",
+        "expected": [
+          "4.1 ROOM RENT LIMIT"
+        ],
+        "got": [
+          "2.2 POST-HOSPITALISATION EXPENSES",
+          "8.1 CO-PAYMENT",
+          "2.1 PRE-HOSPITALISATION EXPENSES"
+        ]
+      },
+      {
+        "query": "section 9.3",
+        "kind": "lexical",
+        "expected": [
+          "9.3 DUPLICATE AND ERRONEOUS CHARGES"
+        ],
+        "got": [
+          "2.2 POST-HOSPITALISATION EXPENSES",
+          "8.1 CO-PAYMENT",
+          "3.1 DAY CARE PROCEDURES"
+        ]
+      }
+    ]
+  },
+  {
+    "configuration": "hybrid",
+    "n": 42,
+    "recall_at_k": 0.9761904761904762,
+    "precision_at_1": 0.8095238095238095,
+    "mrr": 0.878968253968254,
+    "median_latency_ms": 52.81244649995642,
+    "p95_latency_ms": 137.8311919997941,
+    "misses": [
+      {
+        "query": "Is a tooth extraction covered?",
+        "kind": "semantic",
+        "expected": [
+          "7.5 DENTAL TREATMENT"
+        ],
+        "got": [
+          "3.1 DAY CARE PROCEDURES",
+          "5.4 DIAGNOSTIC INVESTIGATIONS",
+          "5.3 IMPLANTS AND PROSTHESES"
+        ]
+      }
+    ]
+  },
+  {
+    "configuration": "hybrid + rerank",
+    "n": 42,
+    "recall_at_k": 1.0,
+    "precision_at_1": 0.9047619047619048,
+    "mrr": 0.9523809523809523,
+    "median_latency_ms": 552.3636690004423,
+    "p95_latency_ms": 808.6740109993116,
+    "misses": []
+  }
+]

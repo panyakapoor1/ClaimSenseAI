@@ -1,11 +1,11 @@
 import json
 
 from core.llm import LLM_MODEL, require_llm
-from agents.rag_retriever import search_policy_chunks
 from models.claim import ClaimItem
+from services.retrieval import search_policy
 
 AUDIT_PROMPT = """You are an expert medical insurance claims auditor.
-Your job is to determine whether a specific line item from a hospital bill should be APPROVED or REJECTED based STRICTLY on the provided insurance policy clauses.
+Your job is to determine whether a specific line item from a hospital bill should be APPROVED, CAPPED, REJECTED or sent for review, based STRICTLY on the provided insurance policy clauses.
 
 ### CLAIM ITEM TO AUDIT:
 - Category: {category}
@@ -23,14 +23,17 @@ Your job is to determine whether a specific line item from a hospital bill shoul
 4. If the item is covered without limit, mark it APPROVED.
 5. If the clauses do not mention the item at all, mark it NEEDS_REVIEW. Do not
    assume medical necessity — say that the policy is silent and a human must decide.
-6. Provide a confidence score between 0.0 and 1.0 reflecting how directly the
+6. Set "clause_ref" to the number shown in brackets beside the clause you relied on,
+   for example 2 for "[Clause 2]". Use null when no clause applied.
+7. Provide a confidence score between 0.0 and 1.0 reflecting how directly the
    clauses settle the question.
 
 Respond strictly in the following JSON schema:
 {{
   "status": "APPROVED" | "CAPPED" | "REJECTED" | "NEEDS_REVIEW",
   "reason": "Explain your reasoning based on the policy text.",
-  "policy_clause_cited": "The exact 'section_header' you relied on. Leave null if none applied.",
+  "clause_ref": 2,
+  "policy_clause_cited": "The exact 'Header' you relied on. Leave null if none applied.",
   "original_clause_text": "A brief snippet of the text you relied on. Leave null if none applied.",
   "page_number": "The page number of the cited clause. Leave null if none applied.",
   "capped_amount": 12000.0,
@@ -38,50 +41,48 @@ Respond strictly in the following JSON schema:
 }}
 """
 
+
 async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
-    """
-    Audits a single claim item by fetching relevant RAG context and querying Groq.
+    """Adjudicate one line item against the clauses retrieved for it.
+
+    Returns the model's verdict plus `chunk_id`: the database id of the passage
+    it said it relied on. That link is what turns a quoted clause into something
+    a reviewer can open — and what makes a fabricated citation detectable, since
+    a clause_ref outside the retrieved set resolves to nothing.
     """
     client = require_llm()
 
-    # 1. Fetch relevant clauses using RAG
     query = f"{item.category} - {item.description}"
-    rag_results = await search_policy_chunks(query=query, policy_id=policy_id, top_k=3)
+    candidates = await search_policy(policy_id=policy_id, query=query, top_k=5)
 
-    # 2. Format policy clauses for the prompt
-    formatted_clauses = ""
-    for idx, res in enumerate(rag_results, 1):
-        formatted_clauses += f"\n--- Clause {idx} ---\n"
-        formatted_clauses += f"Header: {res['section_header']} (Page {res['page_number']})\n"
-        formatted_clauses += f"Text: {res['text_content']}\n"
-    
-    if not formatted_clauses:
-        formatted_clauses = "No relevant policy clauses found for this item."
+    formatted = ""
+    for index, candidate in enumerate(candidates, start=1):
+        formatted += f"\n--- [Clause {index}] ---\n"
+        formatted += f"Header: {candidate.section_header} (Page {candidate.page_number})\n"
+        formatted += f"Text: {candidate.text_content}\n"
 
-    # 3. Construct prompt
+    if not formatted:
+        formatted = "No policy clauses were retrieved for this item."
+
     prompt = AUDIT_PROMPT.format(
         category=item.category,
         description=item.description,
         billed_amount=item.billed_amount,
-        policy_clauses=formatted_clauses
+        policy_clauses=formatted,
     )
 
-    # 4. Call Groq
     response = await client.chat.completions.create(
         messages=[
             {"role": "system", "content": "You output JSON and nothing else."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ],
         model=LLM_MODEL,
         response_format={"type": "json_object"},
-        temperature=0.1
+        temperature=0.1,
     )
 
-    # 5. Parse and return JSON
     try:
-        content = response.choices[0].message.content
-        audit_result = json.loads(content)
-        return audit_result
+        result = json.loads(response.choices[0].message.content)
     except Exception as e:
         # Never fall back to APPROVED here. An unparseable response means the item
         # was not adjudicated at all, and recording it as approved would put a
@@ -93,5 +94,24 @@ async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
             "policy_clause_cited": None,
             "original_clause_text": None,
             "page_number": None,
-            "confidence": 0.0
+            "chunk_id": None,
+            "confidence": 0.0,
         }
+
+    # Resolve the cited clause back to the passage it came from. Anything outside
+    # the retrieved set is dropped rather than trusted.
+    cited = None
+    reference = result.get("clause_ref")
+    if isinstance(reference, int) and 1 <= reference <= len(candidates):
+        cited = candidates[reference - 1]
+
+    result["chunk_id"] = cited.id if cited else None
+    if cited:
+        # Prefer the stored passage's own header, page and text over the model's
+        # restatement of them: the record should quote the source, not a paraphrase.
+        result["policy_clause_cited"] = cited.section_header
+        result["page_number"] = cited.page_number
+        result["original_clause_text"] = cited.text_content[:2000]
+        result["retrieval"] = cited.provenance()
+
+    return result

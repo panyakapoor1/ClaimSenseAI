@@ -95,6 +95,82 @@ POLICY_CLAUSES = [
      "Charges billed more than once for the same service on the same date of "
      "service are not payable. The insurer reserves the right to recover amounts "
      "paid in respect of duplicate charges."),
+    # --- Remaining clauses --------------------------------------------------
+    # Appended, never inserted: the six above are referenced by index from the
+    # CLAIMS specs below. A real policy runs to dozens of clauses, and a
+    # six-clause corpus makes retrieval look trivially easy — top-5 of six is
+    # not a measurement.
+    ("1.1 DEFINITIONS", 1,
+     "In this policy, 'Insured Person' means the individual named in the schedule. "
+     "'Hospital' means an institution registered with the local authorities having "
+     "at least ten inpatient beds, qualified nursing staff on duty at all times, "
+     "and a fully equipped operation theatre."),
+    ("1.4 WAITING PERIODS", 2,
+     "Expenses related to the treatment of any illness diagnosed within thirty days "
+     "of the first policy commencement date are not payable, other than claims "
+     "arising from accidental injury."),
+    ("2.1 PRE-HOSPITALISATION EXPENSES", 2,
+     "Medical expenses incurred in the sixty days immediately before the date of "
+     "admission are payable, provided they relate to the same condition for which "
+     "hospitalisation was required and the inpatient claim has been admitted."),
+    ("2.2 POST-HOSPITALISATION EXPENSES", 2,
+     "Medical expenses incurred in the ninety days immediately following discharge "
+     "are payable where they relate directly to the condition treated during the "
+     "admission, subject to the sum insured."),
+    ("3.1 DAY CARE PROCEDURES", 3,
+     "Procedures listed in Annexure B which require less than twenty-four hours of "
+     "hospitalisation due to technological advancement are covered. Outpatient "
+     "treatment not requiring admission is not covered under this section."),
+    ("3.4 AMBULANCE CHARGES", 3,
+     "Road ambulance charges for transporting the insured person to hospital are "
+     "reimbursed up to 2,000 rupees per hospitalisation, provided the admission is "
+     "an admissible claim under this policy."),
+    ("5.2 ANAESTHETIST AND SPECIALIST FEES", 5,
+     "Fees charged by the anaesthetist, specialist consultants and the operating "
+     "team in respect of a covered surgical procedure are payable at actuals, "
+     "subject to reasonable and customary charges for the geography."),
+    ("5.3 IMPLANTS AND PROSTHESES", 5,
+     "The cost of implants, stents and prostheses used during a covered surgical "
+     "procedure is payable where supported by the invoice and the batch record. "
+     "Cosmetic implants are excluded."),
+    ("5.5 SECOND OPINION", 5,
+     "Charges for a second medical opinion obtained at the insured person's own "
+     "initiative are not payable unless the insurer requested the opinion in writing."),
+    ("6.1 CONSULTATION CHARGES", 6,
+     "Charges for consultations by the treating physician during the period of "
+     "hospitalisation are covered. Consultations unrelated to the admitted "
+     "condition are not payable."),
+    ("6.4 NURSING CHARGES", 6,
+     "General nursing charges forming part of the room tariff are covered. Charges "
+     "for a private duty nurse engaged at the request of the insured person or the "
+     "family are excluded unless certified as medically necessary."),
+    ("7.1 PRE-EXISTING DISEASES", 7,
+     "Expenses related to the treatment of a pre-existing disease and its direct "
+     "complications are excluded until the expiry of thirty-six months of continuous "
+     "coverage from the first policy inception date."),
+    ("7.2 COSMETIC AND AESTHETIC TREATMENT", 7,
+     "Expenses for cosmetic or plastic surgery are excluded unless required as part "
+     "of medically necessary treatment to remove a direct consequence of an accident, "
+     "burn or cancer, and certified by the attending medical practitioner."),
+    ("7.5 DENTAL TREATMENT", 7,
+     "Dental treatment is excluded unless it requires hospitalisation and arises from "
+     "an accidental injury sustained during the policy period."),
+    ("8.1 CO-PAYMENT", 8,
+     "Each and every claim under this policy is subject to a co-payment of ten percent "
+     "of the admissible claim amount, borne by the insured person. The co-payment "
+     "applies after all other deductions."),
+    ("8.3 SUB-LIMITS ON SPECIFIED PROCEDURES", 8,
+     "Cataract surgery is limited to 40,000 rupees per eye per policy year. Knee "
+     "replacement is limited to 200,000 rupees per joint. Amounts in excess of these "
+     "limits are not payable."),
+    ("9.1 CLAIM NOTIFICATION", 9,
+     "The insurer must be notified within twenty-four hours of an emergency admission "
+     "and at least forty-eight hours before a planned admission. Late notification may "
+     "result in the claim being investigated before settlement."),
+    ("10.2 FRAUDULENT CLAIMS", 10,
+     "If a claim is in any respect fraudulent, or if any fraudulent means are used by "
+     "the insured person to obtain benefit, all benefits under this policy shall be "
+     "forfeited and premiums paid shall not be refunded."),
 ]
 
 
@@ -392,6 +468,15 @@ async def seed() -> None:
                 select(DocumentChunk).where(DocumentChunk.document_id == policy_doc.id)
             )
         ).scalars().all()
+
+        # Reconcile rather than skip: POLICY_CLAUSES is authoritative, so a
+        # stale set from an earlier definition is rebuilt instead of silently
+        # leaving the corpus out of step with this file.
+        if len(chunks) != len(POLICY_CLAUSES):
+            for stale in chunks:
+                await session.delete(stale)
+            await session.flush()
+            chunks = []
 
         if not chunks:
             vectors = _embed([text for _, _, text in POLICY_CLAUSES])

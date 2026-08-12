@@ -8,18 +8,27 @@ from tasks.generate_appeal import generate_appeal_task
 
 
 async def startup(ctx):
-    """Warm the embedding model before any job is accepted.
+    """Warm the models before any job is accepted.
 
-    Otherwise the first policy ingestion pays for the model download inside a job,
-    which stalls that job for minutes and makes the whole pipeline look hung.
+    Otherwise the first job pays for the model downloads, which stalls it for
+    minutes and makes the whole pipeline look hung.
     """
     from agents.policy_ingestor import generate_embeddings
+    from services.retrieval import _load_reranker
 
     try:
         await asyncio.to_thread(generate_embeddings, ["warmup"])
         print("Embedding model warm.")
     except Exception as e:
         print(f"Warning: embedding model warmup failed: {e}")
+
+    # The cross-encoder is downloaded on first use. Paying that inside the first
+    # audit stalls the job for minutes and looks like a hang.
+    try:
+        await asyncio.to_thread(_load_reranker)
+        print("Reranker warm.")
+    except Exception as e:
+        print(f"Warning: reranker warmup failed: {e}")
 
 
 async def shutdown(ctx):

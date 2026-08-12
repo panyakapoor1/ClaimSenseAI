@@ -80,7 +80,7 @@ async def search_clauses(
     # empty result set that reads as "this policy has no matching clauses".
     await policy_service.get_policy(session, policy_id, organization_id=user.organization_id)
 
-    from agents.rag_retriever import search_policy_chunks
+    from services.retrieval import search_policy_chunks
 
     results = await search_policy_chunks(query=q, policy_id=str(policy_id), top_k=top_k)
     return ClauseSearchResponse(

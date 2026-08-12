@@ -10,11 +10,18 @@ from .claim import (
     RiskSignalOut,
     StartAuditRequest,
 )
-from .policy import ClauseMatch, ClauseSearchResponse, PolicyCreated, PolicySummary
+from .policy import (
+    ClauseMatch,
+    ClauseSearchResponse,
+    PolicyCreated,
+    PolicySummary,
+    RetrievalProvenance,
+)
 
 __all__ = [
     "ErrorResponse", "JobAccepted", "Page", "encode_cursor", "decode_cursor",
     "AppealOut", "AuditFindingOut", "ClaimCreated", "ClaimDetail", "ClaimItemOut",
     "ClaimSummary", "RiskScoreOut", "RiskSignalOut", "StartAuditRequest",
     "ClauseMatch", "ClauseSearchResponse", "PolicyCreated", "PolicySummary",
+    "RetrievalProvenance",
 ]

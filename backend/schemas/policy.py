@@ -25,6 +25,21 @@ class PolicyCreated(JobAccepted):
     document_id: uuid.UUID
 
 
+class RetrievalProvenance(BaseModel):
+    """How a passage surfaced.
+
+    Exposed rather than kept internal: without it a caller cannot tell whether a
+    result came from semantic similarity, an exact lexical match, or the
+    reranker's judgement — which is exactly what is needed to debug a wrong
+    citation.
+    """
+
+    dense_rank: int | None = Field(description="Rank from embedding search, if found there.")
+    lexical_rank: int | None = Field(description="Rank from full-text search, if found there.")
+    fusion_score: float = Field(description="Reciprocal rank fusion score.")
+    rerank_score: float | None = Field(description="Cross-encoder score, null when not reranked.")
+
+
 class ClauseMatch(BaseModel):
     """A retrieved policy passage with its provenance."""
 
@@ -33,6 +48,7 @@ class ClauseMatch(BaseModel):
     text_content: str
     page_number: int | None
     similarity: float = Field(description="Cosine similarity, 1.0 being identical.")
+    retrieval: RetrievalProvenance
 
 
 class ClauseSearchResponse(BaseModel):

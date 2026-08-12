@@ -185,6 +185,7 @@ async def _run_audit(ctx, job_id: str, claim_id: str, policy_id: str):
             # Create the AuditFinding record
             finding = AuditFinding(
                 claim_item_id=item.id,
+                chunk_id=llm_decision.get("chunk_id"),
                 status=_coerce_status(llm_decision.get("status")),
                 reason=llm_decision.get("reason", "No reason provided."),
                 policy_clause_cited=llm_decision.get("policy_clause_cited"),
