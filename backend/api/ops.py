@@ -13,6 +13,7 @@ from sqlalchemy import text
 from core.database import AsyncSessionLocal
 from core.llm import LLM_AVAILABLE, LLM_MODEL
 from core.metrics import metrics
+from services import storage
 from schemas.ops import HealthResponse, ReadyResponse
 
 router = APIRouter(tags=["ops"])
@@ -54,8 +55,19 @@ async def ready(request: Request, response: Response):
             raise RuntimeError("Queue pool was never initialised.")
         await pool.ping()
 
+    async def _storage():
+        # A round-trip, not just a connection: a reachable endpoint with an
+        # unwritable bucket is not actually ready.
+        import asyncio as _asyncio
+
+        probe_key = "_healthcheck/probe"
+        await _asyncio.to_thread(storage.put, probe_key, b"ok", content_type="text/plain")
+        await _asyncio.to_thread(storage.get, probe_key)
+
     await check("database", _db())
     await check("queue", _queue())
+    await check("storage", _storage())
+    checks["storage"].update(storage.describe())
 
     # The LLM is reported but not required: the API still serves reads and
     # accepts uploads without it, so an absent key is degraded, not unready.

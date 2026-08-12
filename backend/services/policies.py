@@ -23,7 +23,7 @@ async def create_policy_from_upload(
 ) -> tuple[Policy, Document]:
     validate_upload(filename, content_type, payload)
 
-    storage_key = await store_upload(filename, payload)
+    storage_key = await store_upload(filename, payload, prefix="policies")
 
     policy = Policy(
         organization_id=owner.organization_id,

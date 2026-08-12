@@ -1,19 +1,19 @@
 import asyncio
-import os
 
 from sqlalchemy.future import select
 
-from agents.policy_ingestor import extract_policy_text, generate_embeddings
+from agents.document_parser import chunk_document, parse_pdf
+from agents.policy_ingestor import generate_embeddings
 from core.database import AsyncSessionLocal
-from models import Document, DocumentChunk, DocumentStatus, Policy
+from models import Document, DocumentChunk, DocumentPage, DocumentStatus, Policy
+from services import storage
 
 
 async def ingest_policy_task(ctx, policy_id: str, document_id: str):
-    """Parse a policy PDF into retrievable, embedded chunks.
+    """Parse a policy PDF into pages and retrievable, embedded passages.
 
-    Takes a document id rather than a filesystem path: the path now lives on the
-    Document row, so the task does not need to know how documents are stored and
-    keeps working when P4 moves them to object storage.
+    Pages are persisted alongside the passages so a citation can be shown in the
+    context of the page it came from, rather than as a floating quotation.
     """
     print(f"Starting policy ingestion for policy {policy_id}")
 
@@ -23,74 +23,92 @@ async def ingest_policy_task(ctx, policy_id: str, document_id: str):
             print(f"Document {document_id} not found.")
             return {"status": "failed", "error": "Document not found"}
 
-        pdf_path = document.storage_key
+        storage_key = document.storage_key
         document.status = DocumentStatus.PARSING
         await session.commit()
 
     try:
-        chunks = await asyncio.to_thread(extract_policy_text, pdf_path)
-        print(f"Extracted {len(chunks)} chunks from policy PDF")
+        payload = await asyncio.to_thread(storage.get, storage_key)
 
-        if not chunks:
-            await _mark_document_failed(document_id, "No text could be extracted from the PDF.")
-            return {"status": "failed", "error": "No text extracted from PDF"}
+        # Parsing is CPU-bound and OCR especially so; keep it off the event loop
+        # or the worker's Redis heartbeat starves and the job is killed mid-run.
+        pages = await asyncio.to_thread(parse_pdf, payload)
+        passages = await asyncio.to_thread(chunk_document, pages)
 
-        texts = [c["text_content"] for c in chunks]
+        ocr_pages = sum(1 for p in pages if p.from_ocr)
+        print(
+            f"Parsed {len(pages)} page(s) into {len(passages)} passage(s); "
+            f"{ocr_pages} page(s) required OCR"
+        )
+
+        if not passages:
+            await _mark_document_failed(
+                document_id,
+                "No readable text was found, even after OCR. The file may be blank "
+                "or an unsupported image format.",
+            )
+            return {"status": "failed", "error": "No text extracted"}
+
+        texts = [p.text for p in passages]
         embeddings = await asyncio.to_thread(generate_embeddings, texts)
-        print(f"Generated {len(embeddings)} embeddings (dim={len(embeddings[0])})")
 
         async with AsyncSessionLocal() as session:
             policy = (
                 await session.execute(select(Policy).where(Policy.id == policy_id))
             ).scalars().first()
-
             if not policy:
                 print(f"Policy {policy_id} not found.")
                 return {"status": "failed", "error": "Policy not found"}
 
-            pages = set()
-            for ordinal, (chunk_data, embedding) in enumerate(zip(chunks, embeddings)):
-                page_number = _as_int(chunk_data.get("page_number"))
-                if page_number is not None:
-                    pages.add(page_number)
+            for page in pages:
+                session.add(
+                    DocumentPage(
+                        document_id=document_id,
+                        page_number=page.page_number,
+                        text_content=page.text,
+                        width=page.width,
+                        height=page.height,
+                        from_ocr=page.from_ocr,
+                    )
+                )
 
+            for passage, embedding in zip(passages, embeddings):
+                bbox = passage.bbox
                 session.add(
                     DocumentChunk(
                         document_id=document_id,
                         policy_id=policy.id,
-                        ordinal=ordinal,
-                        page_number=page_number,
-                        section_header=chunk_data.get("section_header"),
-                        text_content=chunk_data["text_content"],
+                        ordinal=passage.ordinal,
+                        page_number=passage.page_number,
+                        section_header=passage.section_header,
+                        text_content=passage.text,
+                        bbox_x0=bbox[0] if bbox else None,
+                        bbox_y0=bbox[1] if bbox else None,
+                        bbox_x1=bbox[2] if bbox else None,
+                        bbox_y1=bbox[3] if bbox else None,
                         embedding=embedding,
                     )
                 )
 
             document = await session.get(Document, document_id)
             document.status = DocumentStatus.PARSED
-            document.page_count = max(pages) if pages else None
+            document.page_count = len(pages)
 
             await session.commit()
 
-        print(f"Policy {policy_id} ingested. Stored {len(chunks)} chunks with embeddings.")
+        print(f"Policy {policy_id} ingested: {len(passages)} passages stored.")
 
     except Exception as e:
         print(f"Policy ingestion failed: {e}")
         await _mark_document_failed(document_id, str(e))
         return {"status": "failed", "error": str(e)}
 
-    if os.path.exists(pdf_path):
-        os.remove(pdf_path)
-
-    return {"status": "success", "total_chunks": len(chunks)}
-
-
-def _as_int(value) -> int | None:
-    """Page numbers arrive from the extractor as strings; the column is an int."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    return {
+        "status": "success",
+        "total_chunks": len(passages),
+        "pages": len(pages),
+        "ocr_pages": ocr_pages,
+    }
 
 
 async def _mark_document_failed(document_id: str, reason: str) -> None:

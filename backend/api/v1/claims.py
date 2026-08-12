@@ -4,6 +4,13 @@ from fastapi import APIRouter, File, Request, UploadFile, status
 
 from api.deps import PaginationDep, QueueDep, SessionDep, requires
 from api.errors import DependencyUnavailableError, NotFoundError
+from schemas.evidence import (
+    DocumentOut,
+    DocumentPageOut,
+    EvidenceResponse,
+    FactOut,
+    Region,
+)
 from schemas import (
     AppealOut,
     ClaimCreated,
@@ -18,6 +25,7 @@ from schemas import (
 )
 from services import auth as auth_service
 from services import claims as claim_service
+from services import evidence as evidence_service
 from services.audit import record_audit
 from sqlalchemy import select
 
@@ -229,3 +237,71 @@ async def get_appeal(
             "No appeal has been drafted for this claim yet."
         )
     return AppealOut.model_validate(appeal)
+
+
+@router.get(
+    "/{claim_id}/evidence",
+    response_model=EvidenceResponse,
+    summary="Source documents and located facts for a claim",
+    description=(
+        "Every extracted value with the page and region it was found on. Facts "
+        "that could not be located carry `located: false` and no region, rather "
+        "than a guessed position."
+    ),
+)
+async def get_evidence(
+    claim_id: uuid.UUID,
+    session: SessionDep,
+    user: User = requires(auth_service.READ_CLAIMS),
+):
+    await claim_service.get_claim_detail(
+        session, claim_id, organization_id=user.organization_id
+    )
+
+    documents = await evidence_service.documents_for_claim(session, claim_id)
+    facts = await evidence_service.facts_for_claim(session, claim_id)
+
+    return EvidenceResponse(
+        claim_id=claim_id,
+        documents=[
+            DocumentOut(
+                id=d.id,
+                kind=d.kind,
+                status=d.status,
+                filename=d.filename,
+                byte_size=d.byte_size,
+                page_count=d.page_count,
+                parse_error=d.parse_error,
+                ocr_page_count=sum(1 for p in d.pages if p.from_ocr),
+                pages=[
+                    DocumentPageOut(
+                        page_number=p.page_number,
+                        width=p.width,
+                        height=p.height,
+                        from_ocr=p.from_ocr,
+                        char_count=len(p.text_content or ""),
+                    )
+                    for p in sorted(d.pages, key=lambda p: p.page_number)
+                ],
+            )
+            for d in documents
+        ],
+        facts=[
+            FactOut(
+                id=f.id,
+                kind=f.kind,
+                label=f.label,
+                value_text=f.value_text,
+                value_number=f.value_number,
+                value_date=f.value_date,
+                confidence=f.confidence,
+                located=bool(evidence_service.region_for(f)),
+                region=(
+                    Region(**evidence_service.region_for(f))
+                    if evidence_service.region_for(f)
+                    else None
+                ),
+            )
+            for f in facts
+        ],
+    )

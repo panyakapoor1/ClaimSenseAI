@@ -29,6 +29,24 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: claimsense_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: claimsense
+      MINIO_ROOT_PASSWORD: claimsense-storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   fastapi:
     build:
       context: ./backend
@@ -50,10 +68,19 @@ services:
       # Without this, print() output sits in the buffer and `docker compose logs`
       # shows nothing until the process dies.
       - PYTHONUNBUFFERED=1
+      # Object storage. Documents were previously written to a container-local
+      # directory and deleted after parsing, so a finding's source page could
+      # never be re-opened.
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=claimsense
+      - S3_SECRET_KEY=claimsense-storage
+      - S3_BUCKET=claimsense-documents
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   worker:
@@ -74,6 +101,13 @@ services:
       # Without this, print() output sits in the buffer and `docker compose logs`
       # shows nothing until the process dies.
       - PYTHONUNBUFFERED=1
+      # Object storage. Documents were previously written to a container-local
+      # directory and deleted after parsing, so a finding's source page could
+      # never be re-opened.
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=claimsense
+      - S3_SECRET_KEY=claimsense-storage
+      - S3_BUCKET=claimsense-documents
       # Cap the BLAS/torch thread pools. Unbounded, embedding pins every core and
       # starves the worker's own Redis heartbeat.
       - OMP_NUM_THREADS=2
@@ -83,6 +117,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   frontend:
@@ -114,6 +150,7 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
   redis_data:
   hf_cache:
   frontend_node_modules:

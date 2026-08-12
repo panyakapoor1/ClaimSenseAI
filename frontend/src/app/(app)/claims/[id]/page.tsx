@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, AlertTriangle, FileText, Quote } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
+import EvidencePanel, { type Evidence } from '@/components/EvidencePanel';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
 import {
@@ -71,9 +72,25 @@ async function getClaimDetails(id: string): Promise<ClaimDetail | null> {
   }
 }
 
+async function getEvidence(id: string): Promise<Evidence | null> {
+  try {
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}/evidence`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Could not load evidence:', err);
+    return null;
+  }
+}
+
 export default async function ClaimDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const claim = await getClaimDetails(id);
+  // Fetched together: the two requests are independent, and awaiting them in
+  // sequence would double the page's time to first byte.
+  const [claim, evidence] = await Promise.all([getClaimDetails(id), getEvidence(id)]);
 
   if (!claim) {
     return (
@@ -138,6 +155,8 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </header>
+
+      {evidence && <EvidencePanel evidence={evidence} />}
 
       <div className="space-y-6">
         <h2 className="text-xl font-semibold text-white">Line items and findings</h2>

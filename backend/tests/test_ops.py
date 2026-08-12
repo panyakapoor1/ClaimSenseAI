@@ -15,9 +15,12 @@ async def test_ready_reports_each_dependency(client):
     assert res.status_code in (200, 503)
 
     body = res.json()
-    assert set(body["checks"]) == {"database", "queue", "llm"}
+    assert set(body["checks"]) == {"database", "queue", "storage", "llm"}
     # The database must be reachable for the rest of the suite to mean anything.
     assert body["checks"]["database"]["ok"] is True
+    # Storage is checked by round-tripping an object, not just by connecting.
+    assert body["checks"]["storage"]["ok"] is True
+    assert body["checks"]["storage"]["backend"] in ("s3", "local-filesystem")
 
 
 async def test_ready_marks_llm_as_optional(client):

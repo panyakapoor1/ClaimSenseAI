@@ -14,6 +14,8 @@ class HealthResponse(BaseModel):
 
 
 class DependencyCheck(BaseModel):
+    model_config = {"extra": "allow"}
+
     ok: bool
     error: str | None = None
     required: bool = Field(

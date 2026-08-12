@@ -5,6 +5,7 @@ FastAPI, so the same functions are callable from the worker, the seed script or
 a test without spinning up an app.
 """
 
+import asyncio
 import hashlib
 import os
 import uuid
@@ -27,6 +28,7 @@ from models import (
     User,
 )
 from schemas.common import decode_cursor, encode_cursor
+from services import storage
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
@@ -59,17 +61,16 @@ def validate_upload(filename: str | None, content_type: str | None, payload: byt
         )
 
 
-async def store_upload(filename: str, payload: bytes) -> str:
-    """Persist the bytes and return a storage key.
+async def store_upload(filename: str, payload: bytes, *, prefix: str) -> str:
+    """Persist the bytes durably and return the storage key.
 
-    P4 swaps the local directory for object storage; callers only ever see the
-    key, so nothing above this function changes when that happens.
+    Documents are kept, not deleted after parsing: a finding that cites page 4 is
+    worthless if page 4 no longer exists. Written through the storage service so
+    the same call works against MinIO, S3, or the local filesystem fallback.
     """
-    os.makedirs("uploads", exist_ok=True)
-    key = f"uploads/{uuid.uuid4()}_{filename}"
-    with open(key, "wb") as fh:
-        fh.write(payload)
-    return key
+    safe_name = os.path.basename(filename).replace("/", "_")
+    key = f"{prefix}/{uuid.uuid4()}/{safe_name}"
+    return await asyncio.to_thread(storage.put, key, payload)
 
 
 async def create_claim_from_bill(
@@ -82,7 +83,7 @@ async def create_claim_from_bill(
 ) -> tuple[Claim, Document]:
     validate_upload(filename, content_type, payload)
 
-    storage_key = await store_upload(filename, payload)
+    storage_key = await store_upload(filename, payload, prefix="bills")
 
     claim = Claim(
         organization_id=owner.organization_id,
