@@ -3,6 +3,10 @@ import { ArrowLeft, AlertTriangle, FileText, Quote } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
 import EvidencePanel, { type Evidence } from '@/components/EvidencePanel';
 import RiskPanel, { type Risk, type RiskSignal } from '@/components/RiskPanel';
+import ReviewHistory, { type Review } from '@/components/ReviewHistory';
+import DecisionPanel from '@/components/DecisionPanel';
+import { CAPABILITIES } from '@/lib/roles';
+import { getSession } from '@/lib/session';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
 import {
@@ -79,11 +83,32 @@ async function getEvidence(id: string): Promise<Evidence | null> {
   }
 }
 
+async function getReview(id: string): Promise<Review | null> {
+  try {
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}/review`, {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Could not load review history:', err);
+    return null;
+  }
+}
+
 export default async function ClaimDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  // Fetched together: the two requests are independent, and awaiting them in
-  // sequence would double the page's time to first byte.
-  const [claim, evidence] = await Promise.all([getClaimDetails(id), getEvidence(id)]);
+  // Fetched together: the requests are independent, and awaiting them in
+  // sequence would multiply the page's time to first byte.
+  const [claim, evidence, review, session] = await Promise.all([
+    getClaimDetails(id),
+    getEvidence(id),
+    getReview(id),
+    getSession(),
+  ]);
+
+  const canDecide = Boolean(session?.capabilities.includes(CAPABILITIES.decideClaims));
 
   if (!claim) {
     return (
@@ -150,6 +175,8 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
       </header>
 
       <RiskPanel risk={claim.risk} signals={claim.signals} />
+
+      {review && <ReviewHistory review={review} />}
 
       {evidence && <EvidencePanel evidence={evidence} />}
 
@@ -235,6 +262,13 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
                       reasoning above alone.
                     </p>
                   )}
+
+                  <DecisionPanel
+                    claimId={claim.id}
+                    itemId={item.id}
+                    currentStatus={audit.status}
+                    canDecide={canDecide}
+                  />
                 </div>
               )}
             </div>

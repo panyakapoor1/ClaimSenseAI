@@ -1,10 +1,21 @@
 import asyncio
+import logging
 
 from core.config import get_redis_settings
 from tasks.extract_bill import extract_bill_task
 from tasks.ingest_policy import ingest_policy_task
 from tasks.audit_claim import audit_claim_task
 from tasks.generate_appeal import generate_appeal_task
+
+
+# The worker is a separate process from the API and configures its own logging.
+# Without this, every logger.* call in shared service code — including the claim
+# state machine's transition log — went nowhere, and `docker compose logs worker`
+# showed only bare print() output.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 async def startup(ctx):

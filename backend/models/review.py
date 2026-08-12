@@ -29,6 +29,8 @@ class Investigation(Base, TimestampMixin):
 
     claim = relationship("Claim", back_populates="investigations")
     notes = relationship("InvestigationNote", back_populates="investigation", cascade="all, delete-orphan")
+    opened_by = relationship("User", foreign_keys=[opened_by_id])
+    assigned_to = relationship("User", foreign_keys=[assigned_to_id])
 
 
 class InvestigationNote(Base, TimestampMixin):
@@ -40,6 +42,7 @@ class InvestigationNote(Base, TimestampMixin):
     body = Column(Text, nullable=False)
 
     investigation = relationship("Investigation", back_populates="notes")
+    author = relationship("User")
 
 
 class HumanDecision(Base, TimestampMixin):
@@ -65,6 +68,7 @@ class HumanDecision(Base, TimestampMixin):
     overrides_ai = Column(Boolean, nullable=False, server_default="false")
 
     claim = relationship("Claim", back_populates="human_decisions")
+    decided_by = relationship("User")
 
 
 class Event(Base, TimestampMixin):

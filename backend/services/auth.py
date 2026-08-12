@@ -22,12 +22,20 @@ DECIDE_CLAIMS = "claims:decide"
 MANAGE_POLICIES = "policies:manage"
 ADMINISTER = "system:administer"
 
+# Opening investigations, leaving notes, escalating. Distinct from DECIDE_CLAIMS:
+# raising a concern is not the same authority as settling one, and an analyst
+# needs the first without the second.
+INVESTIGATE = "claims:investigate"
+
 ROLE_CAPABILITIES: dict[UserRole, set[str]] = {
     # Investigates claims: can run the pipeline, cannot make final decisions.
-    UserRole.ANALYST: {READ_CLAIMS, CREATE_CLAIMS, RUN_ANALYSIS, MANAGE_POLICIES},
+    UserRole.ANALYST: {
+        READ_CLAIMS, CREATE_CLAIMS, RUN_ANALYSIS, MANAGE_POLICIES, INVESTIGATE,
+    },
     # Everything an analyst can do, plus approving and escalating.
     UserRole.SENIOR_ANALYST: {
-        READ_CLAIMS, CREATE_CLAIMS, RUN_ANALYSIS, MANAGE_POLICIES, DECIDE_CLAIMS,
+        READ_CLAIMS, CREATE_CLAIMS, RUN_ANALYSIS, MANAGE_POLICIES, INVESTIGATE,
+        DECIDE_CLAIMS,
     },
     # Manages the system. Deliberately not granted DECIDE_CLAIMS: administering
     # the platform is not the same job as adjudicating a patient's claim, and
