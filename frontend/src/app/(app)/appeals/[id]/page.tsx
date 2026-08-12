@@ -1,13 +1,13 @@
 import Link from 'next/link';
-import { ArrowLeft, Download, FileText, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, FileText, CheckCircle2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { API_URL_SERVER } from '@/lib/api';
+import { API_V1_SERVER } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
 async function getAppeal(id: string) {
   try {
-    const res = await fetch(`${API_URL_SERVER}/appeal/${id}`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}/appeal`, { cache: 'no-store' });
     if (!res.ok) {
       if (res.status === 404) return null;
       throw new Error('Failed to fetch appeal');
@@ -52,21 +52,16 @@ export default async function AppealDetailsPage({ params }: { params: Promise<{ 
             </h1>
             <p className="text-slate-400 flex items-center">
               <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />
-              Generated successfully by ClaimSense AI on {new Date(appeal.created_at).toLocaleDateString()}
+              Drafted on {new Date(appeal.created_at).toLocaleDateString()}
             </p>
           </div>
-          
-          <button className="btn-secondary flex items-center bg-slate-800">
-            <Download className="w-4 h-4 mr-2" />
-            Download PDF
-          </button>
         </div>
       </header>
 
       <div className="glass-panel p-8 md:p-12 bg-white text-slate-900 border-none prose max-w-none">
         {/* Render markdown using react-markdown. 
             Note: We set the background to white to mimic a real document. */}
-        <ReactMarkdown>{appeal.appeal_text}</ReactMarkdown>
+        <ReactMarkdown>{appeal.content}</ReactMarkdown>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import LiveTaskTracker from './LiveTaskTracker';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
-import { API_URL } from '@/lib/api';
+import { API_V1, readError } from '@/lib/api';
 
 interface FileDropzoneProps {
   label: string;
@@ -135,38 +135,37 @@ export default function UploadWizard() {
     setIsUploading(true);
 
     try {
-      // 1. Upload Policy
+      // 1. Ingest the policy.
       const policyFormData = new FormData();
       policyFormData.append('file', policyFile);
-      
-      const policyRes = await fetch(`${API_URL}/upload-policy/`, {
+
+      const policyRes = await fetch(`${API_V1}/policies`, {
         method: 'POST',
         body: policyFormData,
       });
-      
-      if (!policyRes.ok) throw new Error('Failed to upload policy');
+      if (!policyRes.ok) throw new Error(await readError(policyRes, 'Could not upload the policy.'));
       const policyData = await policyRes.json();
-      
-      // 2. Upload Bill
+
+      // 2. Open a claim from the bill.
       const billFormData = new FormData();
       billFormData.append('file', billFile);
-      
-      const billRes = await fetch(`${API_URL}/upload-bill/`, {
+
+      const billRes = await fetch(`${API_V1}/claims`, {
         method: 'POST',
         body: billFormData,
       });
-      
-      if (!billRes.ok) throw new Error('Failed to upload bill');
+      if (!billRes.ok) throw new Error(await readError(billRes, 'Could not upload the bill.'));
       const billData = await billRes.json();
 
-      // 3. Start Audit Task
-      const auditRes = await fetch(`${API_URL}/audit-claim/?claim_id=${billData.claim_id}&policy_id=${policyData.policy_id}`, {
+      // 3. Adjudicate the claim against that policy.
+      const auditRes = await fetch(`${API_V1}/claims/${billData.claim_id}/audit`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ policy_id: policyData.policy_id }),
       });
-      
-      if (!auditRes.ok) throw new Error('Failed to start audit process');
+      if (!auditRes.ok) throw new Error(await readError(auditRes, 'Could not start the audit.'));
       const auditData = await auditRes.json();
-      
+
       setJobId(auditData.job_id);
 
     } catch (err: any) {

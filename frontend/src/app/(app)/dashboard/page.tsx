@@ -1,14 +1,15 @@
 import Link from 'next/link';
 import { ArrowRight, Activity, FileCheck2, FileUp, ListChecks, AlertTriangle, TrendingUp } from 'lucide-react';
 import ClaimVolumeChart from '@/components/ClaimVolumeChart';
-import { API_URL_SERVER } from '@/lib/api';
+import { API_V1_SERVER } from '@/lib/api';
 import { formatCurrency, summarise, volumeByDay, type Claim } from '@/lib/claimStatus';
 
 async function getClaims(): Promise<{ claims: Claim[]; reachable: boolean }> {
   try {
-    const res = await fetch(`${API_URL_SERVER}/claims/`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`API responded ${res.status}`);
-    return { claims: await res.json(), reachable: true };
+    const page = await res.json();
+    return { claims: page.items as Claim[], reachable: true };
   } catch (err) {
     console.error('Dashboard could not load claims:', err);
     return { claims: [], reachable: false };

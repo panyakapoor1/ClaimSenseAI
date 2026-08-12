@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import LiveTaskTracker from './LiveTaskTracker';
-import { API_URL } from '@/lib/api';
+import { API_V1, readError } from '@/lib/api';
 
 export default function GenerateAppealButton({ claimId }: { claimId: string }) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -14,10 +14,8 @@ export default function GenerateAppealButton({ claimId }: { claimId: string }) {
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const res = await fetch(`${API_URL}/generate-appeal/?claim_id=${claimId}`, {
-        method: 'POST'
-      });
-      if (!res.ok) throw new Error('Failed to generate appeal');
+      const res = await fetch(`${API_V1}/claims/${claimId}/appeal`, { method: 'POST' });
+      if (!res.ok) throw new Error(await readError(res, 'Could not start appeal generation.'));
       const data = await res.json();
       setJobId(data.job_id);
     } catch (err) {

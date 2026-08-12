@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, AlertTriangle, FileText, Quote } from 'lucide-react';
 import GenerateAppealButton from '@/components/GenerateAppealButton';
-import { API_URL_SERVER } from '@/lib/api';
+import { API_V1_SERVER } from '@/lib/api';
 import {
   ADJUDICATION,
   formatCurrency,
@@ -23,7 +23,7 @@ type Finding = {
 };
 
 type Item = {
-  item_id: string;
+  id: string;
   category: string;
   description: string;
   billed_amount: number;
@@ -32,19 +32,32 @@ type Item = {
   audit: Finding | null;
 };
 
+type RiskSignal = {
+  code: string;
+  title: string;
+  detail: string;
+  direction: 'AGGRAVATING' | 'MITIGATING';
+  weight: number;
+};
+
 type ClaimDetail = {
-  claim_id: string;
+  id: string;
   reference: string;
-  claim_status: string;
+  status: string;
   total_billed: number;
   total_approved: number | null;
   currency: string;
+  claimant_name: string | null;
+  provider_name: string | null;
+  failure_reason: string | null;
   items: Item[];
+  risk: { score: number; band: string; signal_count: number } | null;
+  signals: RiskSignal[];
 };
 
 async function getClaimDetails(id: string): Promise<ClaimDetail | null> {
   try {
-    const res = await fetch(`${API_URL_SERVER}/audit-results/${id}`, { cache: 'no-store' });
+    const res = await fetch(`${API_V1_SERVER}/claims/${id}`, { cache: 'no-store' });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`API responded ${res.status}`);
     return await res.json();
@@ -71,7 +84,7 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
     );
   }
 
-  const status = presentStatus(claim.claim_status);
+  const status = presentStatus(claim.status);
   const disputed = claim.items.filter(
     (i) => i.audit && i.audit.status !== 'APPROVED',
   ).length;
@@ -117,7 +130,7 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
             <span className={`px-4 py-2 text-sm font-medium border ${TONE_CLASS[status.tone]}`}>
               {status.label}
             </span>
-            {disputed > 0 && <GenerateAppealButton claimId={claim.claim_id} />}
+            {disputed > 0 && <GenerateAppealButton claimId={claim.id} />}
           </div>
         </div>
       </header>
@@ -131,7 +144,7 @@ export default async function ClaimDetailsPage({ params }: { params: Promise<{ i
 
           return (
             <div
-              key={item.item_id}
+              key={item.id}
               className={`glass-panel p-6 border-l-4 ${style ? style.accent : 'border-l-slate-700'}`}
             >
               <div className="flex flex-col md:flex-row justify-between md:items-start gap-4 mb-4">

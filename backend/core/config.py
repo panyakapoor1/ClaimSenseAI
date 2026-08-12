@@ -1,10 +1,24 @@
 import os
+
 from arq.connections import RedisSettings
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    database_url: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://claimsense:securepassword@localhost:5432/claimsensedb")
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://claimsense:securepassword@localhost:5432/claimsensedb",
+    )
+
+    # Comma-separated. Configurable because the origin changes per environment,
+    # and a hardcoded localhost was the only allowed caller.
+    cors_origins_raw: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins_raw.split(",") if o.strip()]
+
 
 settings = Settings()
 
