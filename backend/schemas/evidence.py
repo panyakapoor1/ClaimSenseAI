@@ -22,9 +22,10 @@ class Region(BaseModel):
 class FactOut(BaseModel):
     """An extracted value and where it came from.
 
-    `located` is the honest signal: when the value could not be found in the
-    page geometry there is no region, and confidence is lowered rather than a
-    plausible-looking box being invented.
+    There is deliberately no confidence percentage here. The pipeline has no
+    calibrated probability for an extracted value, and rendering one would imply
+    a precision that does not exist. What it genuinely knows is whether the value
+    was found on the page and how.
     """
 
     id: uuid.UUID
@@ -33,8 +34,16 @@ class FactOut(BaseModel):
     value_text: str | None
     value_number: float | None
     value_date: str | None
-    confidence: float
     located: bool
+    match: str | None = Field(
+        default=None,
+        description=(
+            "How the value was tied to the page: EXACT_PHRASE (every word matched "
+            "in order), NUMERIC_FORM (an amount matched one of its printed forms), "
+            "or PARTIAL_TOKEN (only the most distinctive word matched). Null when "
+            "the value was not located."
+        ),
+    )
     region: Region | None
 
 

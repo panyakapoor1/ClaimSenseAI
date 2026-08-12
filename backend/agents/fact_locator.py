@@ -7,16 +7,31 @@ reported with lower confidence, which is honest: we know what was extracted but
 not where it came from.
 """
 
+import enum
 import re
 from dataclasses import dataclass
 
 from agents.document_parser import ParsedPage, Word
 
 
+class MatchKind(str, enum.Enum):
+    """How a value was tied to the page.
+
+    Reported instead of a confidence score. The locator knows exactly how it
+    matched, and saying so is more useful — and more honest — than mapping that
+    onto a number that looks like a calibrated probability and is not.
+    """
+
+    EXACT_PHRASE = "EXACT_PHRASE"      # every word matched, in order
+    NUMERIC_FORM = "NUMERIC_FORM"      # an amount matched one of its printed forms
+    PARTIAL_TOKEN = "PARTIAL_TOKEN"    # only the most distinctive word matched
+
+
 @dataclass
 class Location:
     page_number: int
     bbox: tuple[float, float, float, float]
+    kind: MatchKind = MatchKind.EXACT_PHRASE
 
 
 def _normalise(text: str) -> str:
@@ -74,7 +89,11 @@ def locate_text(pages: list[ParsedPage], needle: str) -> Location | None:
             if end > len(page.words):
                 continue
             if normalised[start:end] == target_tokens:
-                return Location(page.page_number, _span_box(page.words[start:end]))
+                return Location(
+                    page.page_number,
+                    _span_box(page.words[start:end]),
+                    MatchKind.EXACT_PHRASE,
+                )
 
     # Fall back to the longest distinctive token, so a description that was
     # reworded by the model still anchors somewhere sensible.
@@ -83,7 +102,11 @@ def locate_text(pages: list[ParsedPage], needle: str) -> Location | None:
         for page in pages:
             for index, word in enumerate(page.words):
                 if _normalise(word.text) == distinctive:
-                    return Location(page.page_number, _span_box([page.words[index]]))
+                    return Location(
+                        page.page_number,
+                        _span_box([page.words[index]]),
+                        MatchKind.PARTIAL_TOKEN,
+                    )
 
     return None
 
@@ -92,5 +115,6 @@ def locate_amount(pages: list[ParsedPage], value: float) -> Location | None:
     for form in _number_forms(value):
         found = locate_text(pages, form)
         if found:
+            found.kind = MatchKind.NUMERIC_FORM
             return found
     return None

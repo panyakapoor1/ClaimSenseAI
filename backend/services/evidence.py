@@ -29,13 +29,13 @@ async def documents_for_claim(
 async def facts_for_claim(
     session: AsyncSession, claim_id: uuid.UUID
 ) -> list[ExtractedFact]:
-    """Facts ordered so the located, high-confidence ones read first."""
+    """Facts in the order extracted, which follows the bill's own line order."""
     return list(
         (
             await session.execute(
                 select(ExtractedFact)
                 .where(ExtractedFact.claim_id == claim_id)
-                .order_by(ExtractedFact.confidence.desc(), ExtractedFact.created_at)
+                .order_by(ExtractedFact.created_at)
             )
         )
         .scalars()

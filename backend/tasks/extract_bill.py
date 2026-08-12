@@ -185,8 +185,8 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
                 )
             )
 
-            # Locate the charge on the page. A fact that cannot be found keeps a
-            # lower confidence and no box, rather than being given a guessed one.
+            # Locate the charge on the page. A fact that cannot be found gets no
+            # box, rather than a guessed one.
             located = locate_amount(pages, billed) or locate_text(pages, description)
             if located:
                 facts_located += 1
@@ -202,12 +202,16 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
                     value_number=billed,
                     value_date=item.get("service_date"),
                     page_number=located.page_number if located else None,
-                    confidence=0.9 if located else 0.4,
+                    # Not a probability. `confidence` on this row is reserved for
+                    # a calibrated signal that does not exist yet; what the
+                    # pipeline genuinely knows is *how* the value was matched.
+                    confidence=0.0,
                     extra={
                         "line_number": line_number,
                         "category": item.get("category"),
                         "bbox": list(located.bbox) if located else None,
                         "located": bool(located),
+                        "match": located.kind.value if located else None,
                     },
                 )
             )
@@ -227,9 +231,12 @@ async def extract_bill_task(ctx, claim_id: str, document_id: str):
                     label=label,
                     value_text=str(value),
                     page_number=located.page_number if located else None,
-                    confidence=0.9 if located else 0.4,
-                    extra={"bbox": list(located.bbox) if located else None,
-                           "located": bool(located)},
+                    confidence=0.0,
+                    extra={
+                        "bbox": list(located.bbox) if located else None,
+                        "located": bool(located),
+                        "match": located.kind.value if located else None,
+                    },
                 )
             )
 

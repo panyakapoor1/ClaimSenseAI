@@ -294,8 +294,8 @@ async def get_evidence(
                 value_text=f.value_text,
                 value_number=f.value_number,
                 value_date=f.value_date,
-                confidence=f.confidence,
                 located=bool(evidence_service.region_for(f)),
+                match=(f.extra or {}).get("match"),
                 region=(
                     Region(**evidence_service.region_for(f))
                     if evidence_service.region_for(f)

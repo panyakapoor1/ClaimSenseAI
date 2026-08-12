@@ -14,9 +14,21 @@ type Fact = {
   label: string;
   value_text: string | null;
   value_number: number | null;
-  confidence: number;
   located: boolean;
+  match: string | null;
   region: Region | null;
+};
+
+/**
+ * How a value was tied to the page.
+ *
+ * Shown instead of a confidence percentage. The pipeline has no calibrated
+ * probability for an extracted value, and a number would imply one.
+ */
+const MATCH_LABELS: Record<string, { label: string; hint: string }> = {
+  EXACT_PHRASE: { label: 'Exact', hint: 'Every word matched, in order' },
+  NUMERIC_FORM: { label: 'Amount', hint: 'Matched a printed form of this figure' },
+  PARTIAL_TOKEN: { label: 'Partial', hint: 'Only the most distinctive word matched' },
 };
 
 type DocumentPage = {
@@ -113,7 +125,7 @@ export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
               <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                 <th className="pb-2 pr-4 font-medium">Value</th>
                 <th className="pb-2 pr-4 font-medium">Source</th>
-                <th className="pb-2 font-medium text-right">Confidence</th>
+                <th className="pb-2 font-medium text-right">Match</th>
               </tr>
             </thead>
             <tbody>
@@ -137,8 +149,17 @@ export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
                       <span className="text-xs text-slate-500">Not located</span>
                     )}
                   </td>
-                  <td className="py-2.5 text-right text-xs text-slate-400 tabular-nums">
-                    {(fact.confidence * 100).toFixed(0)}%
+                  <td className="py-2.5 text-right">
+                    {fact.match ? (
+                      <span
+                        title={MATCH_LABELS[fact.match]?.hint ?? fact.match}
+                        className="text-xs text-slate-400 border border-white/10 px-1.5 py-0.5"
+                      >
+                        {MATCH_LABELS[fact.match]?.label ?? fact.match}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-600">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
