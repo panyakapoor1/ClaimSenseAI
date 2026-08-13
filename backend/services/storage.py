@@ -21,10 +21,20 @@ S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip()
 S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "").strip()
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "").strip()
 S3_BUCKET = os.getenv("S3_BUCKET", "claimsense-documents").strip()
+S3_REGION = os.getenv("AWS_REGION", "").strip()
 
 LOCAL_ROOT = pathlib.Path(os.getenv("LOCAL_STORAGE_ROOT", "uploads"))
 
-USING_OBJECT_STORAGE = bool(S3_ENDPOINT_URL and S3_ACCESS_KEY and S3_SECRET_KEY)
+# Two ways to reach object storage, and the difference matters in production.
+#
+# MinIO needs an explicit endpoint and static keys. Real S3 needs neither: the
+# endpoint is derived from the region, and credentials come from the instance's
+# IAM role through boto3's default chain. Gating on the endpoint alone, as this
+# did, meant a deployment against a real bucket silently fell through to local
+# disk and lost every document on redeploy.
+USING_MINIO = bool(S3_ENDPOINT_URL and S3_ACCESS_KEY and S3_SECRET_KEY)
+USING_AWS_S3 = bool(S3_BUCKET and S3_REGION and not S3_ENDPOINT_URL)
+USING_OBJECT_STORAGE = USING_MINIO or USING_AWS_S3
 
 _client = None
 _client_lock = threading.Lock()
@@ -48,16 +58,23 @@ def _s3():
             import boto3
             from botocore.config import Config
 
-            _client = boto3.client(
-                "s3",
-                endpoint_url=S3_ENDPOINT_URL,
-                aws_access_key_id=S3_ACCESS_KEY,
-                aws_secret_access_key=S3_SECRET_KEY,
-                config=Config(
-                    signature_version="s3v4",
-                    retries={"max_attempts": 3, "mode": "standard"},
-                ),
+            config = Config(
+                signature_version="s3v4",
+                retries={"max_attempts": 3, "mode": "standard"},
             )
+
+            if USING_MINIO:
+                _client = boto3.client(
+                    "s3",
+                    endpoint_url=S3_ENDPOINT_URL,
+                    aws_access_key_id=S3_ACCESS_KEY,
+                    aws_secret_access_key=S3_SECRET_KEY,
+                    config=config,
+                )
+            else:
+                # No keys passed: boto3 resolves them from the IAM role attached
+                # to the instance, so no long-lived secret exists to leak.
+                _client = boto3.client("s3", region_name=S3_REGION, config=config)
 
         if not _bucket_ready:
             from botocore.exceptions import ClientError
@@ -65,6 +82,14 @@ def _s3():
             try:
                 _client.head_bucket(Bucket=S3_BUCKET)
             except ClientError:
+                # On AWS the bucket is provisioned ahead of time and the role is
+                # scoped to it, so creating one here would fail on permissions
+                # and mask the real problem, which is a misconfigured name.
+                if USING_AWS_S3:
+                    raise StorageError(
+                        f"S3 bucket {S3_BUCKET} is not reachable. Check the name, "
+                        f"the region, and the instance role's permissions."
+                    )
                 try:
                     _client.create_bucket(Bucket=S3_BUCKET)
                     logger.info("Created object storage bucket %s", S3_BUCKET)
