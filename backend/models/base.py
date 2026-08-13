@@ -27,7 +27,7 @@ def utcnow() -> datetime.datetime:
     """Timezone-aware UTC.
 
     The prototype used `datetime.datetime.utcnow`, which is deprecated in 3.12
-    and returns a naive datetime — so every stored timestamp silently lost its
+    and returns a naive datetime, so every stored timestamp silently lost its
     offset and could not be compared against an aware one.
     """
     return datetime.datetime.now(datetime.timezone.utc)
@@ -57,7 +57,7 @@ class TimestampMixin:
     """created_at / updated_at maintained by the database.
 
     `server_default` and `onupdate` are used rather than Python defaults so rows
-    written outside the ORM — migrations, the seed script, raw SQL — still get
+    written outside the ORM (migrations, the seed script, raw SQL) still get
     correct timestamps.
     """
 

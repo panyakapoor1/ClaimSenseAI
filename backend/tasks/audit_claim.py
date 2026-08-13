@@ -2,7 +2,7 @@
 
 The prototype coordinated with the extraction job by polling: two 60×2s loops
 sleeping until the claim reached EXTRACTED and the policy had chunks. That is a
-race condition with a timeout attached — two minutes wasted in the worst happy
+race condition with a timeout attached: two minutes wasted in the worst happy
 case, a silent give-up in the slow one, and the ordering rules written down
 nowhere.
 

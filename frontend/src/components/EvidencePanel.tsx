@@ -57,7 +57,7 @@ export type Evidence = {
  * Where the numbers on this claim came from.
  *
  * Facts that could not be located on a page are shown as such rather than
- * hidden — an analyst needs to know which figures are traceable and which are
+ * hidden. An analyst needs to know which figures are traceable and which are
  * the model's reading alone.
  */
 export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
@@ -69,23 +69,23 @@ export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
   const ocrPages = documents.reduce((sum, d) => sum + d.ocr_page_count, 0);
 
   return (
-    <section className="glass-panel p-6">
-      <div className="flex items-baseline justify-between mb-5 gap-4 flex-wrap">
-        <h2 className="text-xl font-semibold text-white">Evidence</h2>
-        <span className="text-xs text-slate-500 tabular-nums">
+    <section className="panel p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <p className="eyebrow">Evidence</p>
+        <span className="font-mono text-xs tabular-nums text-ink-500">
           {located} of {facts.length} values traced to a page
         </span>
       </div>
 
-      <div className="space-y-3 mb-6">
+      <div className="mt-6 space-y-2">
         {documents.map((doc) => (
-          <div key={doc.id} className="border border-white/10 bg-black/40 p-4">
+          <div key={doc.id} className="well p-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <FileText className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+              <div className="flex min-w-0 items-start gap-3">
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" strokeWidth={1.6} />
                 <div className="min-w-0">
-                  <p className="text-sm text-slate-200 truncate">{doc.filename}</p>
-                  <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                  <p className="truncate text-sm text-ink-900">{doc.filename}</p>
+                  <p className="mt-1 font-mono text-xs tabular-nums text-ink-500">
                     {doc.kind.toLowerCase()} · {doc.page_count ?? 0}{' '}
                     {doc.page_count === 1 ? 'page' : 'pages'}
                   </p>
@@ -93,16 +93,16 @@ export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
               </div>
 
               {doc.ocr_page_count > 0 && (
-                <span className="shrink-0 flex items-center gap-1.5 text-xs text-amber-300 border border-amber-500/25 bg-amber-500/10 px-2 py-1">
-                  <ScanLine className="w-3.5 h-3.5" />
+                <span className="chip shrink-0 border-capped-line bg-capped-soft text-capped">
+                  <ScanLine className="h-3.5 w-3.5" />
                   {doc.ocr_page_count} scanned
                 </span>
               )}
             </div>
 
             {doc.parse_error && (
-              <p className="mt-3 text-xs text-rose-300 flex items-start gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <p className="mt-3 flex items-start gap-2 text-xs text-rejected">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {doc.parse_error}
               </p>
             )}
@@ -111,54 +111,62 @@ export default function EvidencePanel({ evidence }: { evidence: Evidence }) {
       </div>
 
       {ocrPages > 0 && (
-        <p className="text-xs text-amber-200/80 border-l-2 border-amber-500/40 pl-3 mb-6">
+        <p className="mt-5 border-l-2 border-capped pl-4 text-xs leading-relaxed text-ink-700">
           {ocrPages} {ocrPages === 1 ? 'page was' : 'pages were'} read by OCR because
-          there was no text layer. Recognised text can contain errors — check figures
+          there was no text layer. Recognised text can contain errors, so check figures
           against the source before acting on them.
         </p>
       )}
 
       {facts.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="mt-6 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
-                <th className="pb-2 pr-4 font-medium">Value</th>
-                <th className="pb-2 pr-4 font-medium">Source</th>
-                <th className="pb-2 font-medium text-right">Match</th>
+              <tr className="border-b border-line text-left">
+                <th className="pb-3 pr-4 font-normal">
+                  <span className="eyebrow">Value</span>
+                </th>
+                <th className="pb-3 pr-4 font-normal">
+                  <span className="eyebrow">Source</span>
+                </th>
+                <th className="pb-3 text-right font-normal">
+                  <span className="eyebrow">Match</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {facts.map((fact) => (
-                <tr key={fact.id} className="border-t border-white/5">
-                  <td className="py-2.5 pr-4 text-slate-200">
-                    <span className="block truncate max-w-xs">{fact.label}</span>
+                <tr key={fact.id} className="border-b border-line last:border-b-0">
+                  <td className="py-3 pr-4">
+                    <span className="block max-w-xs truncate text-ink-900">
+                      {fact.label}
+                    </span>
                     {fact.value_number != null && (
-                      <span className="text-xs text-slate-500 tabular-nums">
+                      <span className="font-mono text-xs tabular-nums text-ink-500">
                         {fact.value_number.toLocaleString()}
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-4">
+                  <td className="py-3 pr-4">
                     {fact.located && fact.region ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-teal-300">
-                        <MapPin className="w-3.5 h-3.5" />
+                      <span className="inline-flex items-center gap-1.5 font-mono text-xs text-ink-900">
+                        <MapPin className="h-3.5 w-3.5 text-ink-300" strokeWidth={1.8} />
                         Page {fact.region.page_number}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-500">Not located</span>
+                      <span className="text-xs text-ink-300">Not located</span>
                     )}
                   </td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-3 text-right">
                     {fact.match ? (
                       <span
                         title={MATCH_LABELS[fact.match]?.hint ?? fact.match}
-                        className="text-xs text-slate-400 border border-white/10 px-1.5 py-0.5"
+                        className="chip border-line bg-mist text-ink-700"
                       >
                         {MATCH_LABELS[fact.match]?.label ?? fact.match}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-ink-300">None</span>
                     )}
                   </td>
                 </tr>

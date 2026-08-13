@@ -1,7 +1,7 @@
 """PDF fixtures for tests.
 
 Re-exported from `core.pdf_builder` so tests and the seed script generate
-documents the same way — a fixture that diverges from what the app produces
+documents the same way. A fixture that diverges from what the app produces
 stops testing the real thing.
 """
 

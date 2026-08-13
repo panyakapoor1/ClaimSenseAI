@@ -1,7 +1,7 @@
 """Binding extracted values back to where they appear on the page.
 
 The LLM returns structured values but no positions. Rather than ask it for
-coordinates — which it would invent — the value is searched for in the parsed
+coordinates (which it would invent), the value is searched for in the parsed
 word geometry. A fact whose text cannot be found on any page gets no box and is
 reported with lower confidence, which is honest: we know what was extracted but
 not where it came from.
@@ -18,7 +18,7 @@ class MatchKind(str, enum.Enum):
     """How a value was tied to the page.
 
     Reported instead of a confidence score. The locator knows exactly how it
-    matched, and saying so is more useful — and more honest — than mapping that
+    matched, and saying so is more useful, and more honest, than mapping that
     onto a number that looks like a calibrated probability and is not.
     """
 

@@ -30,7 +30,7 @@ class RetrievalProvenance(BaseModel):
 
     Exposed rather than kept internal: without it a caller cannot tell whether a
     result came from semantic similarity, an exact lexical match, or the
-    reranker's judgement — which is exactly what is needed to debug a wrong
+    reranker's judgement, which is exactly what is needed to debug a wrong
     citation.
     """
 

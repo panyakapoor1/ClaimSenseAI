@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight, FileCheck2 } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
 import { formatCurrency, presentStatus, TONE_CLASS, type Claim } from '@/lib/claimStatus';
@@ -24,63 +25,76 @@ export default async function ClaimsPage() {
   const claims = await getClaims();
 
   return (
-    <div className="space-y-8">
-      <header className="mb-10 flex items-end justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Audit results</h1>
-          <p className="text-slate-400 text-lg">
-            Line-by-line findings for every claim, with the policy clause each verdict rests on.
-          </p>
-        </div>
-        <Link href="/upload" className="btn-primary shrink-0">+ New audit</Link>
-      </header>
+    <div>
+      <PageHeader
+        eyebrow="Adjudication"
+        title="Audit results"
+        description="Line-by-line findings for every claim, with the policy clause each verdict rests on."
+        actions={
+          <Link href="/upload" className="btn">
+            New audit
+          </Link>
+        }
+      />
 
       {claims.length === 0 ? (
-        <div className="glass-panel p-12 text-center flex flex-col items-center">
-          <FileCheck2 className="w-16 h-16 text-slate-600 mb-4" />
-          <h2 className="text-xl font-medium text-slate-300 mb-2">No claims yet</h2>
-          <p className="text-slate-500 max-w-md">
-            Upload a hospital bill and the governing policy to run an audit, or load the demo
-            claims with <code className="text-slate-400">python scripts/seed.py</code>.
+        <div className="stamp-in mt-10 flex flex-col items-center border border-dashed border-line-strong px-6 py-20 text-center">
+          <FileCheck2 className="h-8 w-8 text-ink-300" strokeWidth={1.4} />
+          <h2 className="mt-5 text-lg font-semibold text-ink-900">No claims yet</h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-700">
+            Upload a hospital bill and the governing policy to run an audit, or load
+            the demo claims with{' '}
+            <code className="font-mono text-ink-900">python scripts/seed.py</code>.
           </p>
+          <Link href="/upload" className="btn mt-7">
+            Upload a claim
+          </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        /* A ruled register rather than a grid of cards: claims are rows in a
+           ledger, and a row lets the eye compare references and figures down a
+           column instead of hunting across tiles. */
+        <section className="stamp-in mt-10">
+          <div className="hidden grid-cols-[1fr_10rem_9rem_7rem_1.5rem] gap-4 border-b border-line pb-3 md:grid">
+            <span className="eyebrow">Reference</span>
+            <span className="eyebrow">Status</span>
+            <span className="eyebrow text-right">Total billed</span>
+            <span className="eyebrow text-right">Received</span>
+            <span />
+          </div>
+
           {claims.map((claim) => {
             const status = presentStatus(claim.status);
+
             return (
-              <Link key={claim.id} href={`/claims/${claim.id}`}>
-                <div className="glass-panel p-6 hover:border-white/30 transition-colors group h-full flex flex-col">
-                  <div className="flex justify-between items-start mb-4 gap-3">
-                    <span className={`px-3 py-1 text-xs font-medium border ${TONE_CLASS[status.tone]}`}>
-                      {status.label}
-                    </span>
-                    <ArrowRight className="w-5 h-5 text-slate-600 group-hover:text-teal-400 transition-colors shrink-0" />
-                  </div>
+              <Link
+                key={claim.id}
+                href={`/claims/${claim.id}`}
+                className="group grid grid-cols-1 gap-2 border-b border-line px-1 py-4 transition-colors hover:bg-mist md:grid-cols-[1fr_10rem_9rem_7rem_1.5rem] md:items-center md:gap-4"
+              >
+                <span className="font-mono text-sm text-ink-900">
+                  {claim.reference}
+                </span>
 
-                  <h3 className="text-lg font-medium text-white mb-1 font-mono tracking-tight">
-                    {claim.reference}
-                  </h3>
+                <span>
+                  <span className={`chip ${TONE_CLASS[status.tone]}`}>
+                    {status.label}
+                  </span>
+                </span>
 
-                  <div className="mt-auto pt-4 flex justify-between items-end">
-                    <div>
-                      <p className="text-slate-500 text-xs mb-1">Total billed</p>
-                      <p className="text-xl font-semibold text-slate-200 tabular-nums">
-                        {formatCurrency(claim.total_billed, claim.currency)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-slate-500 text-xs mb-1">Received</p>
-                      <p className="text-slate-400 text-sm tabular-nums">
-                        {new Date(claim.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <span className="font-mono text-sm tabular-nums text-ink-900 md:text-right">
+                  {formatCurrency(claim.total_billed, claim.currency)}
+                </span>
+
+                <span className="font-mono text-sm tabular-nums text-ink-500 md:text-right">
+                  {new Date(claim.created_at).toLocaleDateString()}
+                </span>
+
+                <ArrowRight className="hidden h-4 w-4 text-ink-300 transition-all group-hover:translate-x-0.5 group-hover:text-ink-900 md:block" />
               </Link>
             );
           })}
-        </div>
+        </section>
       )}
     </div>
   );

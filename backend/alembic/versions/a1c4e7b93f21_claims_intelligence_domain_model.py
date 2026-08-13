@@ -518,7 +518,7 @@ def downgrade() -> None:
         op.execute(f"DROP TYPE IF EXISTS {name}")
 
     # Restore the legacy structure so this revision is reversible. Legacy data is
-    # not recoverable — see the module docstring.
+    # not recoverable; see the module docstring.
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),

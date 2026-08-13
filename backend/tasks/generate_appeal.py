@@ -60,7 +60,7 @@ async def generate_appeal_task(ctx, claim_id: str):
             await db.commit()
             await _publish_progress(ctx, job_id, {
                 "type": "progress", "status": "completed",
-                "message": "All items approved — no appeal needed.", "progress_pct": 100
+                "message": "All items approved, so no appeal is needed.", "progress_pct": 100
             })
             return {"status": "success", "message": "No appeal needed"}
 

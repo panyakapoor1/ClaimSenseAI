@@ -3,8 +3,8 @@
 Written by hand rather than with a PDF library so the image does not carry an
 authoring dependency, and so generated documents are byte-for-byte deterministic.
 
-Used by the seed script to produce real demo documents — a bill the pipeline
-actually parses — and by the tests for the same reason.
+Used by the seed script to produce real demo documents (a bill the pipeline
+actually parses) and by the tests for the same reason.
 """ 
 
 import io

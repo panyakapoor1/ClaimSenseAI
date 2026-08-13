@@ -1,7 +1,7 @@
 """Orchestration: state transitions, idempotency and the timeline.
 
 The guarantee being tested is that running any stage twice is safe. The
-prototype could not make that claim — a re-audit inserted a second verdict per
+prototype could not make that claim: a re-audit inserted a second verdict per
 line, and the ORM then returned whichever it happened to load first.
 """
 

@@ -8,7 +8,7 @@ clause number ("4.1"), a procedure code, or a rare term like "cholecystectomy"
 carries almost no distinguishing signal in a 384-dimensional average, but is a
 precise lexical match. Hybrid retrieval covers both.
 
-The column is GENERATED ALWAYS, so it cannot drift from the text it indexes —
+The column is GENERATED ALWAYS, so it cannot drift from the text it indexes, and
 there is no application code that could forget to update it.
 
 Revision ID: b7e2d4a91c58

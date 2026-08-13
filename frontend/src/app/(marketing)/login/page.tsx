@@ -3,42 +3,40 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { HeartPulse, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
+import Wordmark from '@/components/Wordmark';
+import ThemeToggle from '@/components/ThemeToggle';
 import { API_V1, readError } from '@/lib/api';
 
 /**
  * The seeded demo accounts, one per role.
  *
  * These are real accounts with real hashed passwords behind real authentication.
- * The credentials are shown because they are deliberately public demo logins —
- * hiding them would imply a secrecy the environment does not have.
+ * The credentials are shown because they are deliberately public demo logins.
+ * Hiding them would imply a secrecy the environment does not have.
  */
 const DEMO_ACCOUNTS = [
   {
     email: 'analyst@demo.claimsense.ai',
     label: 'Analyst',
-    blurb: 'Uploads claims and runs audits',
-    accent: 'hover:border-teal-500/50 group-hover:text-teal-400',
+    blurb: 'Uploads claims, runs audits, escalates and investigates',
   },
   {
     email: 'senior@demo.claimsense.ai',
     label: 'Senior Analyst',
-    blurb: 'Also approves and escalates',
-    accent: 'hover:border-violet-500/50 group-hover:text-violet-400',
+    blurb: 'Everything an analyst can do, plus approve, reject and override',
   },
   {
     email: 'admin@demo.claimsense.ai',
     label: 'Administrator',
-    blurb: 'Manages the platform',
-    accent: 'hover:border-indigo-500/50 group-hover:text-indigo-400',
+    blurb: 'Manages the platform, and deliberately cannot adjudicate a claim',
   },
   {
     email: 'auditor@demo.claimsense.ai',
     label: 'Auditor',
-    blurb: 'Read-only oversight',
-    accent: 'hover:border-slate-400/50 group-hover:text-slate-200',
+    blurb: 'Read-only oversight across the organisation',
   },
 ];
 
@@ -77,65 +75,123 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col justify-center items-center p-6 text-white font-sans relative overflow-hidden">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-teal-500/10 blur-[120px] rounded-full pointer-events-none" />
+    <div className="grid min-h-screen lg:grid-cols-[0.85fr_1fr]">
+      {/* The rail, carried over from the workspace shell. */}
+      <aside className="relative hidden flex-col justify-between bg-rail p-12 lg:flex">
+        <Link href="/" className="transition-opacity hover:opacity-80">
+          <Wordmark invert />
+        </Link>
 
-      <Link href="/" className="absolute top-8 left-8 flex items-center hover:opacity-80 transition-opacity z-10">
-        <HeartPulse className="w-8 h-8 text-white mr-3" />
-        <span className="font-bold text-2xl tracking-tight">
-          ClaimSense<span className="text-teal-400">AI</span>
-        </span>
-      </Link>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="w-full max-w-md relative z-10"
-      >
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold tracking-tight mb-3">Sign in</h1>
-          <p className="text-slate-400">Choose a demo account to see its permissions.</p>
+        <div>
+          <motion.p
+            className="display max-w-sm text-3xl leading-[1.15] text-white"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          >
+            Four roles, enforced by the server.
+          </motion.p>
+          <motion.p
+            className="mt-5 max-w-sm leading-relaxed text-rail-text"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          >
+            Administering the platform and deciding a patient’s claim are
+            different jobs. Conflating them is how an audit trail stops meaning
+            anything. Sign in as an auditor and the decision controls are not
+            merely hidden, they are refused.
+          </motion.p>
         </div>
 
-        <div className="bg-[#0f0f0f] border border-white/10 p-8">
-          {error && (
-            <div className="mb-5 border border-rose-500/30 bg-rose-500/10 p-3 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <p className="text-rose-200 text-sm">{error}</p>
+        <p className="eyebrow eyebrow-invert">Demo environment</p>
+      </aside>
+
+      {/* The account chooser. */}
+      <main className="flex flex-col justify-center bg-paper px-6 py-12 sm:px-12 lg:px-16">
+        <div className="mx-auto w-full max-w-md">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-ink-500 transition-colors hover:text-ink-900 lg:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+            <div className="ml-auto">
+              <ThemeToggle />
             </div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <p className="eyebrow mt-8 lg:mt-0">Sign in</p>
+            <h1 className="display mt-4 text-3xl text-ink-900">
+              Choose a demo account
+            </h1>
+            <p className="mt-3 leading-relaxed text-ink-700">
+              Each one lands in the same workspace with different permissions.
+            </p>
+          </motion.div>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6 flex items-start gap-2.5 border border-rejected-line bg-rejected-soft p-3"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rejected" />
+              <p className="text-sm text-rejected">{error}</p>
+            </motion.div>
           )}
 
-          <div className="space-y-3">
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
+          <div className="mt-8 border-t border-line">
+            {DEMO_ACCOUNTS.map((account, i) => (
+              <motion.button
                 key={account.email}
                 onClick={() => signIn(account.email)}
                 disabled={pending !== null}
-                className={`w-full group flex items-center justify-between p-4 border border-white/10 bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed text-left ${account.accent}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  delay: 0.1 + i * 0.06,
+                  duration: 0.5,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+                className="group flex w-full items-center justify-between gap-4 border-b border-line py-4 text-left transition-colors hover:bg-mist disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <div className="min-w-0">
-                  <h3 className="font-medium text-white transition-colors">{account.label}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{account.blurb}</p>
-                </div>
+                <span className="min-w-0 pl-1">
+                  <span className="block font-medium text-ink-900">
+                    {account.label}
+                  </span>
+                  <span className="mt-1 block text-sm text-ink-500">
+                    {account.blurb}
+                  </span>
+                  <span className="mt-1.5 block font-mono text-xs text-ink-300">
+                    {account.email}
+                  </span>
+                </span>
+
                 {pending === account.email ? (
-                  <Loader2 className="w-5 h-5 text-slate-400 animate-spin shrink-0" />
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-500" />
                 ) : (
-                  <ArrowRight className="w-5 h-5 text-slate-600 group-hover:translate-x-1 transition-transform shrink-0" />
+                  <ArrowRight className="h-4 w-4 shrink-0 text-ink-300 transition-all group-hover:translate-x-1 group-hover:text-ink-900" />
                 )}
-              </button>
+              </motion.button>
             ))}
           </div>
 
-          <div className="mt-8 pt-6 border-t border-white/10">
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Demo environment. These are real accounts with real passwords — the shared
-              password is <code className="text-slate-400">{DEMO_PASSWORD}</code> and every
-              role is enforced by the server. Do not upload real patient data.
-            </p>
-          </div>
+          <p className="mt-8 text-xs leading-relaxed text-ink-500">
+            The shared password is{' '}
+            <code className="font-mono text-ink-700">{DEMO_PASSWORD}</code>. These
+            are real accounts behind real authentication, and every role is
+            enforced server-side. Do not upload real patient data.
+          </p>
         </div>
-      </motion.div>
+      </main>
     </div>
   );
 }

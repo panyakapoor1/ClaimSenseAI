@@ -2,7 +2,7 @@
 
 Retrieval moved to `services.retrieval`, which does hybrid search and reranking.
 This module remains so that any older import keeps working, and forwards rather
-than duplicating the logic — two retrieval implementations would inevitably
+than duplicating the logic, because two retrieval implementations would inevitably
 diverge and the evaluation numbers would stop describing what actually runs.
 """
 

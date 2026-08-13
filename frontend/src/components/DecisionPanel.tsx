@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Check, Loader2, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Check, Loader2, ShieldAlert, X } from 'lucide-react';
 
 import { API_V1, readError } from '@/lib/api';
 
@@ -73,42 +73,86 @@ export default function DecisionPanel({
     }
   };
 
-  const agreeing = currentStatus === 'APPROVED' ? 'APPROVE' : 'REJECT';
+  /**
+   * Which action means "I agree with the model" for this verdict.
+   *
+   * Only two of the model's four outcomes have an action that expresses
+   * agreement. REJECT lands the item on REJECTED, so offering it as agreement
+   * with a CAPPED or NEEDS_REVIEW finding would record the wrong verdict. A
+   * capped line was partly allowed, not refused. Those get escalation instead,
+   * which is the honest move: the reviewer has nothing to sign off with.
+   */
+  const agreeAction: Action | null =
+    currentStatus === 'APPROVED'
+      ? 'APPROVE'
+      : currentStatus === 'REJECTED'
+        ? 'REJECT'
+        : null;
+
   const opposite = currentStatus === 'APPROVED' ? 'REJECTED' : 'APPROVED';
 
+  // Only APPROVE is accepted without one; the server rejects the rest outright.
+  const REASON_REQUIRED: Action[] = [
+    'OVERRIDE',
+    'REJECT',
+    'CONFIRM_FRAUD',
+    'MARK_FALSE_POSITIVE',
+    'ESCALATE',
+  ];
+
+  const REASON_PROMPT: Partial<Record<Action, string>> = {
+    OVERRIDE: `Why are you changing this to ${opposite.toLowerCase()}?`,
+    REJECT: 'Why do you agree with this rejection?',
+    CONFIRM_FRAUD: 'What makes this fraudulent?',
+    ESCALATE: 'Why does this need a second opinion?',
+  };
+
+  /** Straight through when no reason is needed, otherwise open the box. */
+  const start = (action: Action) => {
+    if (REASON_REQUIRED.includes(action)) {
+      setReasonFor(action);
+      setError(null);
+    } else {
+      submit(action);
+    }
+  };
+
   return (
-    <div className="mt-4 pt-4 border-t border-white/10">
+    <div className="mt-5 border-t border-line pt-5">
       {error && (
-        <p className="text-xs text-rose-300 mb-3 flex items-start gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+        <p className="mb-3 flex items-start gap-2 text-xs text-rejected">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {error}
         </p>
       )}
 
       {reasonFor ? (
-        <div className="space-y-2">
-          <label className="text-xs text-slate-400 block">
-            {reasonFor === 'OVERRIDE'
-              ? `Why are you changing this to ${opposite.toLowerCase()}?`
-              : 'Reason'}
+        <div>
+          <label className="eyebrow block" htmlFor={`reason-${itemId}`}>
+            {REASON_PROMPT[reasonFor] ?? 'Reason'}
           </label>
           <textarea
+            id={`reason-${itemId}`}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
             autoFocus
-            className="glass-input w-full text-sm p-2"
-            placeholder="Recorded against your name on the claim's history."
+            className="field mt-3"
+            placeholder="Recorded against your name on the claim’s history."
           />
-          <div className="flex gap-2">
+          <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() =>
                 submit(reasonFor, reasonFor === 'OVERRIDE' ? opposite : undefined)
               }
               disabled={!reason.trim() || pending !== null}
-              className="btn-primary text-xs py-1.5 px-3 disabled:opacity-40"
+              className="btn px-4 py-2 text-xs"
             >
-              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save decision'}
+              {pending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                'Save decision'
+              )}
             </button>
             <button
               onClick={() => {
@@ -116,7 +160,7 @@ export default function DecisionPanel({
                 setReason('');
                 setError(null);
               }}
-              className="text-xs text-slate-400 hover:text-slate-200 px-3"
+              className="px-3 py-2 text-xs text-ink-500 transition-colors hover:text-ink-900"
             >
               Cancel
             </button>
@@ -124,24 +168,34 @@ export default function DecisionPanel({
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
+          {agreeAction ? (
+            <Button
+              onClick={() => start(agreeAction)}
+              busy={pending === agreeAction}
+              icon={<Check className="h-3.5 w-3.5" />}
+              label="Agree with AI"
+              tone="border-verified-line bg-verified-soft text-verified hover:border-verified"
+            />
+          ) : (
+            <Button
+              onClick={() => start('ESCALATE')}
+              busy={pending === 'ESCALATE'}
+              icon={<ArrowUpRight className="h-3.5 w-3.5" />}
+              label="Escalate"
+              tone="border-review-line bg-review-soft text-review hover:border-review"
+            />
+          )}
           <Button
-            onClick={() => submit(agreeing)}
-            busy={pending === agreeing}
-            icon={<Check className="w-3.5 h-3.5" />}
-            label="Agree with AI"
-            tone="text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/10"
-          />
-          <Button
-            onClick={() => setReasonFor('OVERRIDE')}
-            icon={<X className="w-3.5 h-3.5" />}
+            onClick={() => start('OVERRIDE')}
+            icon={<X className="h-3.5 w-3.5" />}
             label={`Override to ${opposite.toLowerCase()}`}
-            tone="text-amber-300 border-amber-500/25 hover:bg-amber-500/10"
+            tone="border-capped-line bg-capped-soft text-capped hover:border-capped"
           />
           <Button
-            onClick={() => setReasonFor('CONFIRM_FRAUD')}
-            icon={<ShieldAlert className="w-3.5 h-3.5" />}
+            onClick={() => start('CONFIRM_FRAUD')}
+            icon={<ShieldAlert className="h-3.5 w-3.5" />}
             label="Confirm fraud"
-            tone="text-rose-300 border-rose-500/25 hover:bg-rose-500/10"
+            tone="border-rejected-line bg-rejected-soft text-rejected hover:border-rejected"
           />
         </div>
       )}
@@ -166,9 +220,9 @@ function Button({
     <button
       onClick={onClick}
       disabled={busy}
-      className={`inline-flex items-center gap-1.5 text-xs border px-2.5 py-1.5 transition-colors disabled:opacity-40 ${tone}`}
+      className={`inline-flex items-center gap-1.5 rounded-[2px] border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${tone}`}
     >
-      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : icon}
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
       {label}
     </button>
   );

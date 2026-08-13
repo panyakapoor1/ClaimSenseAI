@@ -9,8 +9,8 @@ from tasks.generate_appeal import generate_appeal_task
 
 
 # The worker is a separate process from the API and configures its own logging.
-# Without this, every logger.* call in shared service code — including the claim
-# state machine's transition log — went nowhere, and `docker compose logs worker`
+# Without this, every logger.* call in shared service code (including the claim
+# state machine's transition log) went nowhere, and `docker compose logs worker`
 # showed only bare print() output.
 logging.basicConfig(
     level=logging.INFO,
@@ -52,8 +52,8 @@ class WorkerSettings:
     on_startup = startup
 
     # Retries cover transient faults: a provider blip, a database failover, a
-    # policy still indexing. Terminal conditions — no API key, an unreadable
-    # document — are caught inside the tasks and returned rather than raised,
+    # policy still indexing. Terminal conditions (no API key, an unreadable
+    # document) are caught inside the tasks and returned rather than raised,
     # so they consume no attempts and the claim reaches a final state at once.
     max_tries = 4
 

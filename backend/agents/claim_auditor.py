@@ -22,7 +22,7 @@ Your job is to determine whether a specific line item from a hospital bill shoul
    CAPPED and set "capped_amount" to the maximum the policy allows.
 4. If the item is covered without limit, mark it APPROVED.
 5. If the clauses do not mention the item at all, mark it NEEDS_REVIEW. Do not
-   assume medical necessity — say that the policy is silent and a human must decide.
+   assume medical necessity. Say that the policy is silent and a human must decide.
 6. Set "clause_ref" to the number shown in brackets beside the clause you relied on,
    for example 2 for "[Clause 2]". Use null when no clause applied.
 7. Provide a confidence score between 0.0 and 1.0 reflecting how directly the
@@ -47,7 +47,7 @@ async def audit_claim_item(item: ClaimItem, policy_id: str) -> dict:
 
     Returns the model's verdict plus `chunk_id`: the database id of the passage
     it said it relied on. That link is what turns a quoted clause into something
-    a reviewer can open — and what makes a fabricated citation detectable, since
+    a reviewer can open, and what makes a fabricated citation detectable, since
     a clause_ref outside the retrieved set resolves to nothing.
     """
     client = require_llm()

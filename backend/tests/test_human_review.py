@@ -382,7 +382,7 @@ async def test_every_action_reaches_the_append_only_audit_log(
     await client.post(f"/api/v1/claims/{claim.id}/close",
                       json={"reason": "Settled."}, headers=as_senior)
 
-    # Queried by claim alone — no join back into the tables the log describes.
+    # Queried by claim alone, with no join back into the tables the log describes.
     # That is the guarantee: the trail stands on its own.
     from sqlalchemy import or_
 

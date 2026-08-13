@@ -20,8 +20,8 @@ docker compose run --rm fastapi python scripts/seed.py
 docker compose run --rm fastapi python evaluation/run_retrieval_eval.py
 ```
 
-The harness calls `services.retrieval.search_policy` — the same function the
-adjudicator uses — with its lexical and reranking stages switched on and off. It
+The harness calls `services.retrieval.search_policy`, the same function the
+adjudicator uses, with its lexical and reranking stages switched on and off. It
 is not a reimplementation, so the numbers describe what actually ships.
 
 ### Setup
@@ -63,7 +63,7 @@ almost no signal in a 384-dimensional average but are precise lexical matches.
 Adding lexical search took that category from 8/10 to 10/10.
 
 **Query terms are OR-ed, not AND-ed.** `websearch_to_tsquery` builds a
-conjunction, so `section 9.3` required both lexemes — and excluded clause 9.3
+conjunction, so `section 9.3` required both lexemes, and excluded clause 9.3
 itself, whose body never uses the word "section". This is candidate generation,
 not final ranking; recall is what matters at this stage, and fusion plus the
 reranker decide the order.

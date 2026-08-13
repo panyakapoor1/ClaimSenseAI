@@ -2,7 +2,7 @@
 
 A claims-integrity workstation for health insurance. It reads a hospital bill,
 adjudicates every line against the governing policy, scores the claim for risk,
-and lets an analyst agree, disagree or investigate — with every conclusion
+and lets an analyst agree, disagree or investigate, with every conclusion
 traceable to the page it came from.
 
 **Every number the interface shows is computed.** There is no seeded analysis,
@@ -19,7 +19,7 @@ line, finding the clause that governs it and applying it. That is slow, and it i
 where disputes come from: a room-rent cap applied to the wrong tariff, an
 excluded consumable paid by mistake, the same MRI billed twice.
 
-ClaimSense does that adjudication line by line and shows its work — which clause,
+ClaimSense does that adjudication line by line and shows its work: which clause,
 which page, which words.
 
 ---
@@ -30,9 +30,9 @@ which page, which words.
 scanned or photographed bill still parses. Pages that required OCR are labelled,
 because recognised text can be wrong and the reader should know.
 
-**Finds the governing clause.** Hybrid retrieval — dense embeddings for
+**Finds the governing clause.** Hybrid retrieval: dense embeddings for
 paraphrase, PostgreSQL full-text for exact references like `clause 4.1` or
-`anaesthetist` — fused by reciprocal rank, then reranked by a cross-encoder.
+`anaesthetist`, fused by reciprocal rank, then reranked by a cross-encoder.
 
 **Adjudicates each line.** Approved, capped, rejected, or needs-review. The model
 cites a clause by number from the retrieved set; that number resolves back to a
@@ -40,7 +40,7 @@ real passage id, so a fabricated citation resolves to nothing instead of looking
 plausible. A line the policy doesn't address becomes `NEEDS_REVIEW` rather than
 being approved on an assumption.
 
-**Scores risk, decomposed.** A deterministic rules engine — duplicate lines,
+**Scores risk, decomposed.** A deterministic rules engine: duplicate lines,
 room-rent breaches, service dates outside the stay, excluded items, evidence
 gaps. The score is never shown without the contributions that produced it.
 
@@ -100,7 +100,7 @@ upload → parse (OCR fallback) → extract line items → locate each value on 
 Stages are **event-driven and idempotent**. Nothing polls: if extraction is still
 running when an audit is requested, the audit stands down and the extraction job
 enqueues it on completion. Re-running any stage replaces its output rather than
-duplicating it — a unique constraint makes two verdicts on one line impossible.
+duplicating it, and a unique constraint makes two verdicts on one line impossible.
 
 Claim status moves through a declared state machine. A transition outside the
 table raises, and every accepted move writes a timeline event.
@@ -129,7 +129,7 @@ none is shown.
 
 ## Security
 
-- Session tokens in an httpOnly, SameSite cookie — unreadable from JavaScript
+- Session tokens in an httpOnly, SameSite cookie, unreadable from JavaScript
 - bcrypt password hashing; identical error for unknown user and wrong password
 - Four roles, enforced server-side in route dependencies, never in the UI alone
 - Every query scoped to the caller's organization; another tenant's claim
@@ -142,7 +142,7 @@ none is shown.
 |---|---|
 | Analyst | upload, run audits, escalate, investigate |
 | Senior Analyst | + approve, reject, override, confirm fraud |
-| Administrator | manage the platform — deliberately *not* adjudicate |
+| Administrator | manage the platform, deliberately *not* adjudicate |
 | Auditor | read only |
 
 Administering the platform and deciding a patient's claim are different jobs;
@@ -162,7 +162,7 @@ Retrieval, over 42 labelled questions against a 24-clause policy, `top_k=5`:
 
 Reproduce with `python evaluation/run_retrieval_eval.py`. Method, per-category
 breakdown and the limits of these numbers are in
-[docs/EVALUATION.md](docs/EVALUATION.md) — including that n=42 on a small,
+[docs/EVALUATION.md](docs/EVALUATION.md), including that n=42 on a small,
 self-authored corpus is characterisation, not a benchmark.
 
 ---
@@ -184,7 +184,7 @@ docker compose run --rm fastapi alembic upgrade head
 docker compose run --rm fastapi python scripts/seed.py
 ```
 
-The seed **runs the real pipeline** — it renders a policy and four bills as
+The seed **runs the real pipeline**: it renders a policy and four bills as
 actual PDFs, then parses, adjudicates and scores them. It takes a few minutes and
 makes real model calls. Without `GROQ_API_KEY` it still creates and parses the
 documents, and leaves the claims visibly un-adjudicated.
@@ -195,7 +195,7 @@ documents, and leaves the claims visibly un-adjudicated.
 | API docs | http://localhost:8000/docs |
 | Object storage | http://localhost:9001 (`claimsense` / `claimsense-storage`) |
 
-**Demo accounts** — password `claimsense-demo` for all four:
+**Demo accounts**, password `claimsense-demo` for all four:
 `analyst@` · `senior@` · `admin@` · `auditor@demo.claimsense.ai`
 
 These are real accounts with hashed passwords behind real authentication. The
@@ -220,7 +220,7 @@ one that names them.
   calibrated. Read it as the model's opinion of itself.
 - **Retrieval numbers are small-sample.** n=42, 24 clauses, questions and policy
   by the same author.
-- **Contradiction detection is not implemented.** The table exists and is empty —
+- **Contradiction detection is not implemented.** The table exists and is empty, and
   finding a real contradiction needs cross-document comparison. An empty table is
   better than invented rows.
 - **`ai_decisions` is unused.** `audit_findings` already records the AI's per-line

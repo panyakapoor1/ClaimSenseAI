@@ -14,7 +14,7 @@ class Policy(Base, TimestampMixin):
     policy_name = Column(String(300), nullable=False)
     policy_number = Column(String(120), nullable=True, index=True)
 
-    # Coverage window. Policy timing is a standard risk signal — treatment dated
+    # Coverage window. Policy timing is a standard risk signal: treatment dated
     # outside the window, or a claim filed suspiciously soon after inception.
     effective_from = Column(Date, nullable=True)
     effective_to = Column(Date, nullable=True)

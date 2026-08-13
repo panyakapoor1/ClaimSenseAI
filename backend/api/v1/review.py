@@ -2,7 +2,7 @@
 
 Authorisation is per action rather than per route. Raising a concern
 (INVESTIGATE) and settling one (DECIDE_CLAIMS) are different authorities, so a
-single "can touch this claim" permission would be too coarse — an analyst needs
+single "can touch this claim" permission would be too coarse, because an analyst needs
 to escalate without being able to approve.
 
 Every action writes an audit_logs entry. That table is append-only at the

@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { ArrowRight, Activity, FileCheck2, FileUp, ListChecks, AlertTriangle, TrendingUp } from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import ClaimVolumeChart from '@/components/ClaimVolumeChart';
+import PageHeader from '@/components/PageHeader';
 import { API_V1_SERVER } from '@/lib/api';
-import { authHeaders } from '@/lib/session';
+import { authHeaders, getSession } from '@/lib/session';
+import { CAPABILITIES } from '@/lib/roles';
 import { formatCurrency, summarise, volumeByDay, type Claim } from '@/lib/claimStatus';
 
 async function getClaims(): Promise<{ claims: Claim[]; reachable: boolean }> {
@@ -25,94 +27,96 @@ async function getClaims(): Promise<{ claims: Claim[]; reachable: boolean }> {
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const { claims, reachable } = await getClaims();
+  const [{ claims, reachable }, session] = await Promise.all([getClaims(), getSession()]);
   const stats = summarise(claims);
   const volume = volumeByDay(claims);
 
+  // The shortcuts have to obey the same capabilities the navigation does.
+  // Offering an auditor an upload card sends them to a page the server will
+  // refuse. The rule is enforced either way, but advertising it is a lie.
+  const canCreate = Boolean(session?.capabilities.includes(CAPABILITIES.createClaims));
+
   return (
-    <div className="space-y-8">
-      <header className="mb-10">
-        <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Dashboard</h1>
-        <p className="text-slate-400 text-lg">
-          {reachable
+    <div>
+      <PageHeader
+        eyebrow="Overview"
+        title="Dashboard"
+        description={
+          reachable
             ? `${stats.total} ${stats.total === 1 ? 'claim' : 'claims'} in the system.`
-            : 'Claim data is currently unavailable.'}
-        </p>
-      </header>
+            : 'Claim data is currently unavailable.'
+        }
+      />
 
       {!reachable && (
-        <div className="border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="stamp-in mt-8 flex items-start gap-3 border border-capped-line bg-capped-soft p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-capped" />
           <div>
-            <p className="text-amber-200 font-medium text-sm">Cannot reach the API</p>
-            <p className="text-slate-400 text-sm mt-1">
-              The dashboard shows no figures rather than stale ones. Check that the backend container is running.
+            <p className="text-sm font-medium text-capped">Cannot reach the API</p>
+            <p className="mt-1 text-sm text-ink-700">
+              The dashboard shows no figures rather than stale ones. Check that the
+              backend container is running.
             </p>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Figures sit in one ruled block rather than four floating cards. They
+          are a single reading, and separating them implies they are unrelated. */}
+      <section className="stamp-in mt-10 grid grid-cols-2 gap-px border border-line bg-line md:grid-cols-4">
         <Stat
-          icon={<Activity className="w-6 h-6 text-teal-400" />}
           label="In progress"
           value={stats.inProgress}
           note={stats.inProgress > 0 ? 'Being processed now' : 'Nothing queued'}
           live={stats.inProgress > 0}
         />
+        <Stat label="Audited" value={stats.audited} note="Adjudication complete" />
         <Stat
-          icon={<FileCheck2 className="w-6 h-6 text-indigo-400" />}
-          label="Audited"
-          value={stats.audited}
-          note="Adjudication complete"
-        />
-        <Stat
-          icon={<ListChecks className="w-6 h-6 text-slate-300" />}
-          label="Appeals generated"
+          label="Appeals drafted"
           value={stats.appealsGenerated}
           note="Letters on file"
         />
         <Stat
-          icon={<AlertTriangle className="w-6 h-6 text-rose-400" />}
           label="Needs attention"
           value={stats.needsAttention}
           note={stats.needsAttention > 0 ? 'Failed or unprocessed' : 'No failures'}
+          attention={stats.needsAttention > 0}
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <div className="glass-panel p-6 lg:col-span-2 flex flex-col">
-          <div className="flex items-baseline justify-between mb-6">
-            <h2 className="text-xl font-semibold text-white flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-teal-400" /> Claim volume
-            </h2>
-            <span className="text-xs text-slate-500 uppercase tracking-wider">Last 14 days</span>
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <section className="panel flex flex-col p-6 lg:col-span-2">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="eyebrow">Claim volume</h2>
+            <span className="eyebrow">Last 14 days</span>
           </div>
-          <ClaimVolumeChart data={volume} />
-          <p className="text-xs text-slate-500 mt-4 pt-4 border-t border-white/10">
-            Total billed across all claims:{' '}
-            <span className="text-slate-300 font-medium tabular-nums">
+
+          <div className="mt-6 flex-1">
+            <ClaimVolumeChart data={volume} />
+          </div>
+
+          <p className="mt-6 border-t border-line pt-4 text-sm text-ink-500">
+            Total billed across all claims{' '}
+            <span className="font-mono tabular-nums text-ink-900">
               {formatCurrency(stats.totalBilled, claims[0]?.currency ?? 'INR')}
             </span>
           </p>
-        </div>
+        </section>
 
         <div className="flex flex-col gap-6">
-          <Action
-            href="/upload"
-            icon={<FileUp className="w-6 h-6 text-black" />}
-            accent="bg-teal-500"
-            hover="group-hover:text-teal-400"
-            title="Upload claim"
-            body="Submit a bill and policy to audit line by line."
-          />
+          {canCreate && (
+            <Action
+              href="/upload"
+              step="01"
+              title="Upload a claim"
+              body="Submit a bill and the governing policy to audit it line by line."
+            />
+          )}
           <Action
             href="/claims"
-            icon={<ListChecks className="w-6 h-6 text-black" />}
-            accent="bg-indigo-500"
-            hover="group-hover:text-indigo-400"
+            step={canCreate ? '02' : '01'}
             title="Audit results"
-            body="Review findings and generate appeals."
+            body="Review findings, check the cited clause, and draft an appeal."
           />
         </div>
       </div>
@@ -121,29 +125,35 @@ export default async function DashboardPage() {
 }
 
 function Stat({
-  icon,
   label,
   value,
   note,
   live = false,
+  attention = false,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: number;
   note: string;
   live?: boolean;
+  attention?: boolean;
 }) {
   return (
-    <div className="glass-panel p-6 flex flex-col">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-11 h-11 bg-[#111111] border border-white/10 flex items-center justify-center shrink-0">
-          {icon}
-        </div>
-        <h2 className="text-sm font-medium text-slate-300">{label}</h2>
-      </div>
-      <p className="text-4xl font-bold text-white mt-auto tabular-nums">{value}</p>
-      <p className="text-slate-500 text-xs mt-2 flex items-center">
-        {live && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse mr-2" />}
+    <div className="bg-surface p-6">
+      <p className="eyebrow">{label}</p>
+      <p
+        className={`display mt-5 text-4xl tabular-nums ${
+          attention ? 'text-rejected' : 'text-ink-900'
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-2 flex items-center gap-2 text-xs text-ink-500">
+        {live && (
+          <span className="relative flex h-1.5 w-1.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-review opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-review" />
+          </span>
+        )}
         {note}
       </p>
     </div>
@@ -152,29 +162,26 @@ function Stat({
 
 function Action({
   href,
-  icon,
-  accent,
-  hover,
+  step,
   title,
   body,
 }: {
   href: string;
-  icon: React.ReactNode;
-  accent: string;
-  hover: string;
+  step: string;
   title: string;
   body: string;
 }) {
   return (
-    <Link href={href} className="block h-full">
-      <div className="glass-panel p-6 hover:border-white/30 transition-colors group h-full flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <div className={`w-12 h-12 ${accent} flex items-center justify-center`}>{icon}</div>
-          <ArrowRight className={`w-6 h-6 text-slate-500 ${hover} transition-colors`} />
-        </div>
-        <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
-        <p className="text-slate-400 text-sm">{body}</p>
+    <Link
+      href={href}
+      className="panel group flex h-full flex-col p-6 transition-colors hover:border-ink-300"
+    >
+      <div className="flex items-start justify-between">
+        <span className="font-mono text-xs tabular-nums text-ink-300">{step}</span>
+        <ArrowRight className="h-4 w-4 text-ink-300 transition-all group-hover:translate-x-1 group-hover:text-ink-900" />
       </div>
+      <h3 className="mt-6 text-lg font-semibold text-ink-900">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-ink-700">{body}</p>
     </Link>
   );
 }

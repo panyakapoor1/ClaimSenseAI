@@ -11,7 +11,7 @@ class ModelVersion(Base, TimestampMixin):
 
     Every AI-written row references one of these. Without it, a finding produced
     by a model that has since been retired is indistinguishable from a current
-    one — which is precisely the situation the Groq deprecations created.
+    one, which is precisely the situation the Groq deprecations created.
     """
 
     __tablename__ = "model_versions"

@@ -26,7 +26,7 @@ class SessionOut(BaseModel):
     """The signed-in user and what they are allowed to do.
 
     Capabilities are returned so the UI can hide controls the caller cannot use.
-    This is presentation only — the server enforces the same list independently.
+    This is presentation only; the server enforces the same list independently.
     """
 
     user: UserOut

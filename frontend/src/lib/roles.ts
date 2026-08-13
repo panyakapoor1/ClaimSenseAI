@@ -2,7 +2,7 @@
  * Session shapes and the capability vocabulary.
  *
  * Deliberately free of server-only imports. `lib/session.ts` uses `next/headers`,
- * which cannot be pulled into a client bundle — so the pieces a Client Component
+ * which cannot be pulled into a client bundle, so the pieces a Client Component
  * needs (types, labels, capability names) live here instead.
  *
  * These names mirror `services/auth.py`. The server is the authority; this copy

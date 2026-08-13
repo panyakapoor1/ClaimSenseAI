@@ -1,6 +1,8 @@
 import Link from 'next/link';
-import { ArrowLeft, FileText, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import PrintButton from '@/components/PrintButton';
+import CopyLetterButton from '@/components/CopyLetterButton';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
 
@@ -14,59 +16,79 @@ async function getAppeal(id: string) {
     });
     if (!res.ok) {
       if (res.status === 404) return null;
-      throw new Error('Failed to fetch appeal');
+      throw new Error(`API responded ${res.status}`);
     }
     return await res.json();
   } catch (err) {
-    console.error(err);
+    console.error('Could not load appeal:', err);
     return null;
   }
 }
 
-export default async function AppealDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AppealDetailsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const appeal = await getAppeal(id);
 
   if (!appeal) {
     return (
-      <div className="glass-panel p-12 text-center flex flex-col items-center">
-        <FileText className="w-16 h-16 text-slate-600 mb-4" />
-        <h2 className="text-xl font-medium text-slate-300 mb-2">No Appeal Found</h2>
-        <p className="text-slate-500 mb-6">
-          An appeal letter has not been generated for this claim yet.
+      <div className="stamp-in flex flex-col items-center border border-dashed border-line-strong px-6 py-20 text-center">
+        <FileText className="h-8 w-8 text-ink-300" strokeWidth={1.4} />
+        <h2 className="mt-5 text-lg font-semibold text-ink-900">No appeal yet</h2>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-700">
+          An appeal letter has not been drafted for this claim. Open the claim and
+          draft one from its disputed lines.
         </p>
-        <Link href={`/claims/${id}`} className="btn-primary">
-          Back to Claim Details
+        <Link href={`/claims/${id}`} className="btn mt-7">
+          Back to the claim
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
-      <header className="mb-8">
-        <Link href={`/claims/${id}`} className="inline-flex items-center text-slate-400 hover:text-teal-400 transition-colors mb-4 text-sm font-medium">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Claim Details
+    <div className="mx-auto max-w-3xl">
+      <header className="stamp-in no-print">
+        <Link
+          href={`/claims/${id}`}
+          className="group inline-flex items-center gap-2 text-sm text-ink-500 transition-colors hover:text-ink-900"
+        >
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          Back to the claim
         </Link>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+
+        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white mb-2 flex items-center">
-              Generated Appeal Letter
-            </h1>
-            <p className="text-slate-400 flex items-center">
-              <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />
-              Drafted on {new Date(appeal.created_at).toLocaleDateString()}
+            <p className="eyebrow">Appeal letter</p>
+            <h1 className="display mt-3 text-3xl text-ink-900">Draft correspondence</h1>
+            <p className="mt-3 font-mono text-sm tabular-nums text-ink-500">
+              Drafted {new Date(appeal.created_at).toLocaleDateString()}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <CopyLetterButton targetId="appeal-letter" />
+            <PrintButton />
+          </div>
         </div>
+
+        <div className="rule mt-8" />
       </header>
 
-      <div className="glass-panel p-8 md:p-12 bg-white text-slate-900 border-none prose max-w-none">
-        {/* Render markdown using react-markdown. 
-            Note: We set the background to white to mimic a real document. */}
-        <ReactMarkdown>{appeal.content}</ReactMarkdown>
-      </div>
+      {/* Set as a document rather than as interface: the letter is the artefact
+          an analyst sends, so it should already look like one on screen. */}
+      <article className="print-sheet stamp-in mt-10 border border-line bg-white px-8 py-12 shadow-[0_1px_3px_rgb(21_22_26/0.04)] sm:px-14 sm:py-16">
+        <div className="letter" id="appeal-letter">
+          <ReactMarkdown>{appeal.content}</ReactMarkdown>
+        </div>
+      </article>
+
+      <p className="no-print mt-6 text-xs leading-relaxed text-ink-500">
+        A draft. Every disputed charge is argued against the clause used to reject
+        it. Check both before this goes anywhere.
+      </p>
     </div>
   );
 }

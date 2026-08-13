@@ -1,80 +1,504 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   ClaimSense: "Case File"
+
+   One rule governs colour: chroma only ever means status. Buttons, headings and
+   navigation are ink on bone; the only saturated things on a page are verdicts.
+   An analyst scanning a claim should be able to trust that anything coloured is
+   telling them something about the adjudication.
+   --------------------------------------------------------------------------- */
+
 @theme {
-  --color-slate-900: #020617;
-  --color-slate-800: #0f172a;
-  --color-teal-400: #06b6d4; /* Vibrant Cyan */
-  --color-teal-500: #0891b2;
-  --color-indigo-500: #8b5cf6; /* Vibrant Violet */
-  --color-indigo-600: #7c3aed;
-  --color-emerald-400: #10b981;
-  --color-emerald-500: #059669;
-  --color-rose-400: #f43f5e;
-  --color-rose-500: #e11d48;
+  /* Surfaces: a cool bone, not a cream. Paper is the page, surface is a raised
+     document, mist is an inset well (quotes, code, terminal output). */
+  --color-paper: #faf9f7;
+  --color-surface: #ffffff;
+  --color-mist: #f3f2ee;
+  --color-line: #e5e3dd;
+  --color-line-strong: #d1cec6;
+
+  /* Ink: neutral-cool near-black through to a legible tertiary grey. */
+  --color-ink-900: #15161a;
+  --color-ink-700: #3a3d44;
+  --color-ink-500: #6b6f77;
+  --color-ink-300: #9a9ea6;
+
+  /* The rail: the dark half of the two-tone shell. */
+  --color-rail: #16171b;
+  --color-rail-raised: #1e2026;
+  --color-rail-line: #2c2e35;
+  --color-rail-text: #a9adb5;
+  --color-rail-dim: #71757d;
+
+  /* Verdicts. Each has an ink-weight foreground and a tinted ground that sits
+     comfortably on bone without glowing. */
+  --color-verified: #14603f;
+  --color-verified-soft: #e7f0ea;
+  --color-verified-line: #bcd6c8;
+
+  --color-capped: #8a5a12;
+  --color-capped-soft: #f7f0e2;
+  --color-capped-line: #e0d0ae;
+
+  --color-rejected: #99271f;
+  --color-rejected-soft: #f8eae8;
+  --color-rejected-line: #e5c4c0;
+
+  --color-review: #274b7d;
+  --color-review-soft: #e9eef6;
+  --color-review-line: #c3d1e5;
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  /* Formal correspondence only: the appeal letter, which should read as a
+     printed document rather than as part of the interface. */
+  --font-letter: Georgia, "Times New Roman", serif;
 }
 
+/* ---------------------------------------------------------------------------
+   Themes
+
+   Every utility compiles to var(--color-*), so a theme is just a redefinition
+   of those variables. No `dark:` variant appears on a single element in the codebase.
+
+   Dark is *selected*, not inverted. The rail stays the darkest surface and the
+   workspace sits a step above it, so "system on the left, documents on the
+   right" survives as a value relationship rather than collapsing into one flat
+   black. Status colours are re-picked for a dark ground rather than reused:
+   the light spruce and oxblood are far too dark to read on it.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  color-scheme: light;
+  --focus-ring: rgb(21 22 26 / 0.08);
+}
+
+/* System preference, unless the reader has explicitly chosen light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --focus-ring: rgb(242 242 240 / 0.14);
+
+    --color-paper: #16171a;
+    --color-surface: #1c1d21;
+    --color-mist: #212328;
+    --color-line: #2b2d33;
+    --color-line-strong: #3a3d45;
+
+    --color-ink-900: #f2f2f0;
+    --color-ink-700: #c3c5c9;
+    --color-ink-500: #8d9199;
+    --color-ink-300: #63666d;
+
+    --color-rail: #0e0f12;
+    --color-rail-raised: #1a1c20;
+    --color-rail-line: #26282e;
+    --color-rail-text: #b8bcc4;
+    --color-rail-dim: #7a7e86;
+
+    --color-verified: #5fbe8f;
+    --color-verified-soft: #14251d;
+    --color-verified-line: #26483a;
+
+    --color-capped: #d7a24a;
+    --color-capped-soft: #2a2013;
+    --color-capped-line: #4d3c1f;
+
+    --color-rejected: #e4796f;
+    --color-rejected-soft: #2b1614;
+    --color-rejected-line: #522723;
+
+    --color-review: #7aa7e0;
+    --color-review-soft: #151f2e;
+    --color-review-line: #2a3d5a;
+  }
+}
+
+/* An explicit choice wins over the system in both directions. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --focus-ring: rgb(242 242 240 / 0.14);
+
+  --color-paper: #16171a;
+  --color-surface: #1c1d21;
+  --color-mist: #212328;
+  --color-line: #2b2d33;
+  --color-line-strong: #3a3d45;
+
+  --color-ink-900: #f2f2f0;
+  --color-ink-700: #c3c5c9;
+  --color-ink-500: #8d9199;
+  --color-ink-300: #63666d;
+
+  --color-rail: #0e0f12;
+  --color-rail-raised: #1a1c20;
+  --color-rail-line: #26282e;
+  --color-rail-text: #b8bcc4;
+  --color-rail-dim: #7a7e86;
+
+  --color-verified: #5fbe8f;
+  --color-verified-soft: #14251d;
+  --color-verified-line: #26483a;
+
+  --color-capped: #d7a24a;
+  --color-capped-soft: #2a2013;
+  --color-capped-line: #4d3c1f;
+
+  --color-rejected: #e4796f;
+  --color-rejected-soft: #2b1614;
+  --color-rejected-line: #522723;
+
+  --color-review: #7aa7e0;
+  --color-review-soft: #151f2e;
+  --color-review-line: #2a3d5a;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-@keyframes pulse-slow {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.05); }
+::selection {
+  background: var(--color-ink-900);
+  color: var(--color-paper);
 }
 
-.animate-pulse-slow {
-  animation: pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* --- Typography ---------------------------------------------------------- */
+
+/* The eyebrow carries every section label in the app. Mono, letterspaced and
+   small, so it reads as a filing label rather than a heading. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-ink-500);
 }
 
-.glass-panel {
-  @apply bg-[#0f0f0f] border border-white/10 rounded-none shadow-none;
+.eyebrow-invert {
+  color: var(--color-rail-dim);
 }
 
-.glass-input {
-  @apply bg-black border border-white/20 rounded-none text-white focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all;
+/* Display headings are the sans at its tightest. The identity comes from the
+   mono/sans pairing and the palette, not from a second display face. */
+.display {
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.05;
 }
 
-.btn-primary {
-  @apply bg-teal-500 text-black font-semibold rounded-none hover:bg-teal-400 transition-colors active:scale-[0.98] px-5 py-2.5;
+/* --- Structure ----------------------------------------------------------- */
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 2px;
 }
 
-.btn-secondary {
-  @apply bg-white text-black font-semibold rounded-none hover:bg-slate-200 transition-colors active:scale-[0.98] px-5 py-2.5;
+.panel-flush {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
 }
 
-/* Scrollbar styles */
+.well {
+  background: var(--color-mist);
+  border: 1px solid var(--color-line);
+  border-radius: 2px;
+}
+
+.rule {
+  height: 1px;
+  background: var(--color-line);
+}
+
+/* --- Controls ------------------------------------------------------------ */
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors;
+  background: var(--color-ink-900);
+  color: var(--color-paper);
+  border: 1px solid var(--color-ink-900);
+  border-radius: 2px;
+}
+.btn:hover:not(:disabled) {
+  background: var(--color-ink-700);
+  border-color: var(--color-ink-700);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors;
+  background: transparent;
+  color: var(--color-ink-900);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 2px;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-mist);
+  border-color: var(--color-ink-300);
+}
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.field {
+  @apply w-full px-3 py-2 text-sm transition-colors;
+  background: var(--color-surface);
+  color: var(--color-ink-900);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 2px;
+}
+.field::placeholder {
+  color: var(--color-ink-300);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--color-ink-900);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* Status chips are stamped, not tinted glass: a hairline box with an ink-weight
+   label. Colour is carried by the token trio on each variant. */
+.chip {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  border: 1px solid;
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink-900);
+  outline-offset: 2px;
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+/* The house motion is a stamp: a short drop with a hair of scale, as though the
+   element were pressed onto the page. Used in place of the usual slide-up. */
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stamp-in {
+  animation: stamp-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes rule-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.rule-draw {
+  transform-origin: left;
+  animation: rule-draw 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28), transparent);
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-in,
+  .rule-draw,
+  .sweep::after {
+    animation: none;
+  }
+  .stamp-in,
+  .rule-draw {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Scrollbars ---------------------------------------------------------- */
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--color-mist);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: var(--color-line-strong);
+  border: 2px solid var(--color-mist);
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--color-ink-300);
 }
 
-/* Custom prose styles for markdown rendering */
-.prose h1 { font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; margin-top: 1.5rem; }
-.prose h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; margin-top: 1.25rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
-.prose h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; }
-.prose p { margin-bottom: 0.75rem; line-height: 1.75; }
-.prose ul, .prose ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
-.prose ul { list-style-type: disc; }
-.prose ol { list-style-type: decimal; }
-.prose li { margin-bottom: 0.25rem; line-height: 1.6; }
-.prose strong { font-weight: 700; }
-.prose blockquote { border-left: 4px solid #6366f1; padding-left: 1rem; margin: 1rem 0; font-style: italic; color: #475569; }
+/* Scrollbars inside the dark rail and the log terminal. */
+.scroll-dark::-webkit-scrollbar-track {
+  background: var(--color-rail);
+}
+.scroll-dark::-webkit-scrollbar-thumb {
+  background: var(--color-rail-line);
+  border: 2px solid var(--color-rail);
+}
+.scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: var(--color-rail-dim);
+}
+
+/* --- The appeal letter --------------------------------------------------- */
+
+/* Set as correspondence, not as UI: serif, measured line length, indented
+   paragraphs. This is the one surface that should look printed. */
+.letter {
+  font-family: var(--font-letter);
+  color: #1a1a1a;
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+.letter h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.25rem;
+  letter-spacing: -0.01em;
+}
+.letter h2 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  margin: 2rem 0 0.75rem;
+}
+.letter h3 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.5rem;
+}
+.letter p {
+  margin: 0 0 1.125rem;
+}
+.letter ul,
+.letter ol {
+  margin: 0 0 1.125rem;
+  padding-left: 1.75rem;
+}
+.letter ul { list-style: disc; }
+.letter ol { list-style: decimal; }
+.letter li { margin-bottom: 0.375rem; }
+.letter strong { font-weight: 700; }
+.letter em { font-style: italic; }
+.letter hr {
+  border: 0;
+  border-top: 1px solid #d8d5cd;
+  margin: 2rem 0;
+}
+.letter blockquote {
+  border-left: 3px solid #d8d5cd;
+  padding-left: 1.25rem;
+  margin: 1.25rem 0;
+  color: #45443f;
+}
+.letter table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.125rem;
+  font-size: 0.9375rem;
+}
+.letter th,
+.letter td {
+  border: 1px solid #d8d5cd;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.letter th {
+  background: #f4f2ed;
+  font-weight: 700;
+}
+
+/* Printing an appeal must produce the letter and nothing else: no rail, no
+   masthead, no shell offsets. Everything is hidden and only the sheet is
+   re-shown, which is immune to whatever ancestors happen to wrap it. */
+@page {
+  size: A4;
+  margin: 18mm;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    min-height: 0 !important;
+    display: block !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+
+  .print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    /* The stamp leaves a transform behind mid-animation, which would make this
+       a containing block and strand the absolute positioning. */
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .letter {
+    font-size: 11.5pt;
+    line-height: 1.6;
+    color: #000 !important;
+  }
+
+  /* A heading should not be the last thing on a page. */
+  .letter h1,
+  .letter h2,
+  .letter h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+    color: #000 !important;
+  }
+
+  .letter p,
+  .letter li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .letter table,
+  .letter blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

@@ -1,7 +1,7 @@
 """Investigations: the open questions on a claim.
 
 A decision settles something. An investigation is the state of not having settled
-it yet — a named person owns a question, with notes accumulating under it until
+it yet: a named person owns a question, with notes accumulating under it until
 it is resolved. Keeping that distinct from `human_decisions` means "what is still
 open on this claim" is a query rather than an inference from what is absent.
 """

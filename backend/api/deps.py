@@ -86,7 +86,7 @@ def requires(capability: str):
     """Build a dependency that enforces one capability.
 
     Enforcement lives on the server, in the route definition. The frontend hides
-    controls a role cannot use, but that is presentation — this is the boundary.
+    controls a role cannot use, but that is presentation; this is the boundary.
     """
 
     async def _check(user: CurrentUser) -> User:

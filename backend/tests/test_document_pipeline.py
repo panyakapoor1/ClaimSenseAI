@@ -1,7 +1,7 @@
 """The document pipeline: storage, OCR fallback, chunking and provenance.
 
-The OCR test builds a genuinely image-only PDF — a rendered bill with no text
-layer at all — because that is the case the prototype failed silently on. A
+The OCR test builds a genuinely image-only PDF (a rendered bill with no text
+layer at all) because that is the case the prototype failed silently on. A
 fixture with an embedded text layer would pass without OCR ever running.
 """
 

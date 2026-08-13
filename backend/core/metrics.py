@@ -4,7 +4,7 @@ Hand-rolled rather than pulling in prometheus_client: what P2 needs is request
 counts and latency, the exposition format is a few lines, and adding a
 dependency for that would fail the project's own technology test. If P12 needs
 exemplars, multiprocess collection or custom collectors, swap this for the real
-library then — `/metrics` is the only thing that would change.
+library then; `/metrics` is the only thing that would change.
 
 Every number here is measured. Nothing is estimated or seeded.
 """

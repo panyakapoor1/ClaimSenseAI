@@ -3,20 +3,26 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, FileUp, ListChecks, FileText, HeartPulse, LogOut, Loader2, User } from 'lucide-react';
+import { LayoutDashboard, FileUp, ListChecks, FileText, LogOut, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
+import Wordmark from '@/components/Wordmark';
+import ThemeToggle from '@/components/ThemeToggle';
 import { API_V1 } from '@/lib/api';
 import { CAPABILITIES, ROLE_LABELS, type Session } from '@/lib/roles';
 
-const ROLE_ACCENT: Record<string, string> = {
-  ADMIN: 'bg-indigo-500/20 text-indigo-300',
-  SENIOR_ANALYST: 'bg-violet-500/20 text-violet-300',
-  ANALYST: 'bg-teal-500/20 text-teal-300',
-  AUDITOR: 'bg-slate-500/20 text-slate-300',
-};
-
+/**
+ * The dark half of the shell.
+ *
+ * The rail is the system; the workspace to its right is the documents. Keeping
+ * them in opposite tones means an analyst always knows whether they are looking
+ * at the application or at a claim.
+ *
+ * Roles are labelled in mono rather than colour-coded: in this interface colour
+ * means adjudication status and nothing else, so a role badge does not get to
+ * borrow it.
+ */
 export default function Sidebar({ session }: { session: Session }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -25,11 +31,11 @@ export default function Sidebar({ session }: { session: Session }) {
   const { user, capabilities } = session;
 
   // Navigation reflects what this role can actually do. This is presentation
-  // only — the server rejects the call regardless of what is rendered here.
+  // only. The server rejects the call regardless of what is rendered here.
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, capability: CAPABILITIES.readClaims },
-    { name: 'Upload Claim', href: '/upload', icon: FileUp, capability: CAPABILITIES.createClaims },
-    { name: 'Audit Results', href: '/claims', icon: ListChecks, capability: CAPABILITIES.readClaims },
+    { name: 'Upload claim', href: '/upload', icon: FileUp, capability: CAPABILITIES.createClaims },
+    { name: 'Audit results', href: '/claims', icon: ListChecks, capability: CAPABILITIES.readClaims },
     { name: 'Appeals', href: '/appeals', icon: FileText, capability: CAPABILITIES.readClaims },
   ].filter((item) => capabilities.includes(item.capability));
 
@@ -47,83 +53,98 @@ export default function Sidebar({ session }: { session: Session }) {
     }
   };
 
+  const initials = user.full_name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
-    <motion.aside
-      initial={{ x: -300, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="w-64 h-screen border-r border-white/10 bg-[#000000] flex flex-col fixed left-0 top-0 z-50"
-    >
-      <div className="h-20 flex items-center px-6 border-b border-white/10 shrink-0">
-        <HeartPulse className="w-7 h-7 text-teal-400 mr-3" />
-        <span className="font-bold text-2xl tracking-tight text-slate-100">
-          ClaimSense<span className="text-teal-400">AI</span>
-        </span>
+    <aside className="no-print fixed left-0 top-0 z-50 flex h-screen w-64 flex-col bg-rail">
+      <div className="flex h-[4.5rem] shrink-0 items-center border-b border-rail-line px-5">
+        <Link href="/dashboard" className="transition-opacity hover:opacity-80">
+          <Wordmark size="sm" invert />
+        </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+      <nav className="scroll-dark flex-1 overflow-y-auto px-3 py-6">
+        <p className="eyebrow eyebrow-invert px-2 pb-3">Workspace</p>
 
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={clsx(
-                'relative flex items-center px-4 py-3 transition-colors group overflow-hidden',
-                isActive ? 'text-teal-400' : 'text-slate-400 hover:text-slate-200',
-              )}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute inset-0 bg-[#0f0f0f] border border-white/10"
-                  initial={false}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                />
-              )}
-              <Icon
+        <div className="space-y-0.5">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={clsx(
-                  'w-5 h-5 mr-3 transition-colors relative z-10',
-                  isActive ? 'text-teal-400' : 'text-slate-500 group-hover:text-slate-300',
+                  'group relative flex items-center gap-3 rounded-[2px] px-3 py-2.5 text-sm transition-colors',
+                  isActive ? 'text-white' : 'text-rail-text hover:text-white',
                 )}
-              />
-              <span className="font-medium relative z-10">{item.name}</span>
-            </Link>
-          );
-        })}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="rail-active"
+                    className="absolute inset-0 rounded-[2px] bg-rail-raised"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  />
+                )}
+                {/* The marker echoes the stamp in the logo. */}
+                {isActive && (
+                  <motion.span
+                    layoutId="rail-marker"
+                    className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-white"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  />
+                )}
+                <Icon
+                  className={clsx(
+                    'relative z-10 h-[1.125rem] w-[1.125rem] shrink-0 transition-colors',
+                    isActive ? 'text-white' : 'text-rail-dim group-hover:text-rail-text',
+                  )}
+                  strokeWidth={1.6}
+                />
+                <span className="relative z-10 font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="border-t border-white/10 p-4 shrink-0 space-y-2 bg-[#050505]">
-        <div className="flex items-center px-4 py-3 mb-2 border border-white/5 bg-black">
-          <div
-            className={clsx(
-              'w-8 h-8 flex items-center justify-center mr-3 shrink-0',
-              ROLE_ACCENT[user.role] ?? ROLE_ACCENT.AUDITOR,
-            )}
-          >
-            <User className="w-4 h-4" />
+      <div className="shrink-0 border-t border-rail-line p-3">
+        <div className="flex items-center gap-3 rounded-[2px] px-2 py-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[2px] bg-rail-raised font-mono text-[0.6875rem] text-rail-text">
+            {initials}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-white">{user.full_name}</p>
+            <p className="eyebrow eyebrow-invert mt-1 truncate">
+              {ROLE_LABELS[user.role]}
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user.full_name}</p>
-            <p className="text-xs text-slate-500">{ROLE_LABELS[user.role]}</p>
-          </div>
+          <ThemeToggle invert />
         </div>
 
         <button
           onClick={handleLogout}
           disabled={signingOut}
-          className="flex items-center w-full px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+          className="mt-1 flex w-full items-center gap-3 rounded-[2px] px-3 py-2.5 text-sm text-rail-dim transition-colors hover:bg-rail-raised hover:text-rail-text disabled:opacity-50"
         >
           {signingOut ? (
-            <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+            <Loader2 className="h-[1.125rem] w-[1.125rem] animate-spin" />
           ) : (
-            <LogOut className="w-5 h-5 mr-3 text-rose-500" />
+            <LogOut className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.6} />
           )}
           <span className="font-medium">{signingOut ? 'Signing out…' : 'Sign out'}</span>
         </button>
       </div>
-    </motion.aside>
+    </aside>
   );
 }

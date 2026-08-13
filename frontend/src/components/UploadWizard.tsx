@@ -1,22 +1,39 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { UploadCloud, FileType, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, Check, AlertTriangle, Loader2, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
-import LiveTaskTracker from './LiveTaskTracker';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+
+import LiveTaskTracker from './LiveTaskTracker';
 import { API_V1, readError } from '@/lib/api';
 
 interface FileDropzoneProps {
+  step: string;
   label: string;
+  hint: string;
   onFileSelect: (file: File) => void;
+  onReject: (message: string) => void;
   selectedFile: File | null;
   accept?: string;
 }
 
-function FileDropzone({ label, onFileSelect, selectedFile, accept = 'application/pdf' }: FileDropzoneProps) {
+function formatSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(0)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function FileDropzone({
+  step,
+  label,
+  hint,
+  onFileSelect,
+  onReject,
+  selectedFile,
+  accept = 'application/pdf',
+}: FileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -29,91 +46,91 @@ function FileDropzone({ label, onFileSelect, selectedFile, accept = 'application
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.type === accept) {
-        onFileSelect(file);
-      } else {
-        alert('Please upload a PDF file.');
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+
+      // Reported inline rather than through alert(), which interrupts the drag
+      // and gives the browser's voice to our error.
+      if (file.type !== accept) {
+        onReject(`${file.name} is not a PDF.`);
+        return;
       }
-    }
-  }, [accept, onFileSelect]);
+      onFileSelect(file);
+    },
+    [accept, onFileSelect, onReject],
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      onFileSelect(e.target.files[0]);
-    }
+    const file = e.target.files?.[0];
+    if (file) onFileSelect(file);
   };
 
   return (
-    <motion.div 
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+    <div
       className={clsx(
-        "relative border-2 border-dashed p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer h-56",
-        isDragging ? "border-teal-400 bg-[#111111]" : "border-white/20 hover:border-white/40 hover:bg-[#111111]",
-        selectedFile ? "border-emerald-500 bg-[#0f0f0f]" : ""
+        'relative flex h-56 cursor-pointer flex-col justify-between border border-dashed p-5 transition-colors',
+        isDragging && 'border-ink-900 bg-mist',
+        !isDragging && selectedFile && 'border-verified-line bg-verified-soft',
+        !isDragging && !selectedFile && 'border-line-strong hover:border-ink-300 hover:bg-mist',
       )}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
       onDrop={handleDrop}
     >
-      <input 
-        type="file" 
-        accept={accept} 
+      <input
+        type="file"
+        accept={accept}
         onChange={handleChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+        aria-label={label}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
-      
+
+      <div className="flex items-start justify-between">
+        <span className="font-mono text-xs tabular-nums text-ink-300">{step}</span>
+        {selectedFile ? (
+          <Check className="h-4 w-4 text-verified" />
+        ) : (
+          <UploadCloud className="h-4 w-4 text-ink-300" strokeWidth={1.6} />
+        )}
+      </div>
+
       <AnimatePresence mode="wait">
         {selectedFile ? (
-          <motion.div 
+          <motion.div
             key="selected"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex flex-col items-center space-y-3"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="w-16 h-16 bg-[#111111] flex items-center justify-center border border-emerald-500/30">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-emerald-400 font-medium">File Selected</p>
-              <p className="text-slate-300 text-sm mt-1 max-w-[200px] truncate">{selectedFile.name}</p>
-              <p className="text-slate-500 text-xs">
-                {selectedFile.size < 1024 * 1024 
-                  ? `${(selectedFile.size / 1024).toFixed(1)} KB` 
-                  : `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`}
-              </p>
-            </div>
+            <p className="eyebrow">{label}</p>
+            <p className="mt-2 truncate text-sm text-ink-900">{selectedFile.name}</p>
+            <p className="mt-1 font-mono text-xs tabular-nums text-ink-500">
+              {formatSize(selectedFile.size)} · click to replace
+            </p>
           </motion.div>
         ) : (
-          <motion.div 
-            key="unselected"
-            initial={{ opacity: 0, y: 10 }}
+          <motion.div
+            key="empty"
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex flex-col items-center space-y-3"
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="w-16 h-16 bg-[#111111] border border-white/10 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <UploadCloud className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <p className="text-slate-200 font-medium">{label}</p>
-              <p className="text-slate-400 text-sm mt-1">Drag & drop or click to browse</p>
-              <p className="text-slate-500 text-xs mt-1">PDF up to 10MB</p>
-            </div>
+            <p className="text-base font-medium text-ink-900">{label}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-500">{hint}</p>
+            <p className="mt-2 font-mono text-xs text-ink-300">PDF · up to 10 MB</p>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
@@ -121,16 +138,17 @@ export default function UploadWizard() {
   const [billFile, setBillFile] = useState<File | null>(null);
   const [policyFile, setPolicyFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const router = useRouter();
 
   const handleStartAudit = async () => {
     if (!billFile || !policyFile) {
-      setError("Please select both a bill and a policy document.");
+      setError('Select both a bill and a policy document.');
       return;
     }
-    
+
     setError(null);
     setIsUploading(true);
 
@@ -170,113 +188,126 @@ export default function UploadWizard() {
       const auditData = await auditRes.json();
 
       setJobId(auditData.job_id);
-
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || 'An error occurred during upload.');
+      setError(err instanceof Error ? err.message : 'An error occurred during upload.');
       setIsUploading(false);
     }
   };
+
+  const loadDemoDocuments = async () => {
+    setLoadingDemo(true);
+    setError(null);
+    try {
+      const [billRes, policyRes] = await Promise.all([
+        fetch('/demo-hospital-bill-2026.pdf'),
+        fetch('/demo-aetna-policy-document.pdf'),
+      ]);
+      if (!billRes.ok || !policyRes.ok) throw new Error('Demo documents are missing.');
+
+      const [billBlob, policyBlob] = await Promise.all([
+        billRes.blob(),
+        policyRes.blob(),
+      ]);
+
+      setBillFile(
+        new File([billBlob], 'demo-hospital-bill-2026.pdf', { type: 'application/pdf' }),
+      );
+      setPolicyFile(
+        new File([policyBlob], 'demo-aetna-policy-document.pdf', {
+          type: 'application/pdf',
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the demo documents.');
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
+  const ready = Boolean(billFile && policyFile);
 
   return (
     <AnimatePresence mode="wait">
       {jobId ? (
         <motion.div
           key="tracker"
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -50 }}
-          transition={{ type: "spring", stiffness: 100 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <LiveTaskTracker 
-            jobId={jobId} 
-            onComplete={() => {
-              router.push('/claims');
-            }} 
-          />
+          <LiveTaskTracker jobId={jobId} onComplete={() => router.push('/claims')} />
         </motion.div>
       ) : (
-        <motion.div 
+        <motion.div
           key="upload"
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ type: "spring", stiffness: 100 }}
-          className="glass-panel p-8 max-w-4xl mx-auto border-t-[3px] border-t-teal-500"
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-white tracking-tight">Upload Documents</h2>
-            <p className="text-slate-400 mt-2 text-lg">
-              Upload the medical bill and corresponding insurance policy to start the AI audit.
-            </p>
-          </div>
-
           <AnimatePresence>
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mb-6 p-4 bg-[#111111] border border-rose-500 flex items-start overflow-hidden"
+                className="overflow-hidden"
               >
-                <AlertCircle className="w-5 h-5 text-rose-400 mr-3 shrink-0 mt-0.5" />
-                <p className="text-rose-200">{error}</p>
+                <div className="mb-6 flex items-start gap-2.5 border border-rejected-line bg-rejected-soft p-4">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rejected" />
+                  <p className="text-sm text-rejected">{error}</p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <FileDropzone 
-              label="Upload Medical Bill" 
-              onFileSelect={setBillFile} 
-              selectedFile={billFile} 
+          <div className="grid gap-4 md:grid-cols-2">
+            <FileDropzone
+              step="01"
+              label="Hospital bill"
+              hint="The itemised bill to adjudicate. Scanned copies are read by OCR."
+              onFileSelect={setBillFile}
+              onReject={setError}
+              selectedFile={billFile}
             />
-            <FileDropzone 
-              label="Upload Insurance Policy" 
-              onFileSelect={setPolicyFile} 
-              selectedFile={policyFile} 
+            <FileDropzone
+              step="02"
+              label="Insurance policy"
+              hint="The governing policy. Its clauses are what every line is decided against."
+              onFileSelect={setPolicyFile}
+              onReject={setError}
+              selectedFile={policyFile}
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t border-white/10">
+          <div className="mt-6 flex flex-col items-start justify-between gap-4 border-t border-line pt-6 sm:flex-row sm:items-center">
             <button
-              onClick={async () => {
-                const billRes = await fetch('/demo-hospital-bill-2026.pdf');
-                const billBlob = await billRes.blob();
-                setBillFile(new File([billBlob], "demo-hospital-bill-2026.pdf", { type: "application/pdf" }));
-
-                const policyRes = await fetch('/demo-aetna-policy-document.pdf');
-                const policyBlob = await policyRes.blob();
-                setPolicyFile(new File([policyBlob], "demo-aetna-policy-document.pdf", { type: "application/pdf" }));
-              }}
-              className="flex items-center text-sm font-medium text-slate-400 hover:text-white transition-colors mb-4 sm:mb-0"
+              onClick={loadDemoDocuments}
+              disabled={loadingDemo || isUploading}
+              className="inline-flex items-center gap-2 text-sm text-ink-500 transition-colors hover:text-ink-900 disabled:opacity-50"
             >
-              <Sparkles className="w-4 h-4 mr-2 text-teal-400" />
-              Use Demo Documents
+              {loadingDemo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Use the demo bill and policy
             </button>
 
-            <motion.button 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={handleStartAudit}
-              disabled={!billFile || !policyFile || isUploading}
-              className={clsx(
-                "btn-primary flex items-center px-8 py-3 w-full sm:w-auto",
-                (!billFile || !policyFile || isUploading) && "opacity-50 cursor-not-allowed grayscale"
-              )}
+              disabled={!ready || isUploading}
+              className="btn w-full sm:w-auto"
             >
               {isUploading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                  Processing...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading…
                 </>
               ) : (
                 <>
-                  Start AI Audit
-                  <FileType className="w-5 h-5 ml-3" />
+                  Start the audit
+                  <ArrowRight className="h-4 w-4" />
                 </>
               )}
-            </motion.button>
+            </button>
           </div>
         </motion.div>
       )}

@@ -189,7 +189,7 @@ def latest_risk_score(claim: Claim) -> RiskScore | None:
 
 
 def sorted_signals(claim: Claim) -> list[RiskSignal]:
-    """Heaviest contribution first — that is the order an analyst reads them in."""
+    """Heaviest contribution first, which is the order an analyst reads them in."""
     return sorted(claim.risk_signals, key=lambda s: abs(s.weight), reverse=True)
 
 

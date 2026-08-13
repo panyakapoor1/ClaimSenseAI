@@ -4,7 +4,7 @@ These are contract tests: they exercise the real app against the real database
 and a stubbed queue. Mocking the database would let the schema and the API drift
 apart silently, which is the specific failure the P2 gate exists to catch.
 
-The queue is stubbed because enqueuing is the boundary of this phase — that a
+The queue is stubbed because enqueuing is the boundary of this phase: that a
 job was queued with the right arguments is the contract; what the worker does
 with it is tested where the worker is.
 """
@@ -133,7 +133,7 @@ async def as_auditor(session):
 async def foreign_org(session):
     """A second tenant, so cross-organization isolation can be tested for real.
 
-    Without this the scoping tests would pass trivially — every row would belong
+    Without this the scoping tests would pass trivially, because every row would belong
     to the only organization that exists.
     """
     # Id assigned here rather than relying on a post-commit refresh, so the
@@ -167,7 +167,7 @@ async def foreign_claim(session, foreign_org):
     yield claim
 
     # Removed before the owning organization is torn down. Without this,
-    # deleting the org makes SQLAlchemy null the child's organization_id — which
+    # deleting the org makes SQLAlchemy null the child's organization_id, which
     # the NOT NULL constraint rejects, failing teardown for a passing test.
     await session.delete(claim)
     await session.commit()

@@ -1,7 +1,7 @@
 """Deterministic demo data, produced by running the real pipeline.
 
 Nothing analytical is written by hand. The script authors the two things a real
-tenant would supply — a policy document and four hospital bills — renders them as
+tenant would supply (a policy document and four hospital bills), renders them as
 actual PDFs, stores them, and then runs the same ingestion, retrieval,
 adjudication and risk scoring the application runs for an uploaded claim.
 
@@ -187,7 +187,7 @@ def render_policy() -> bytes:
 # The bills
 # ---------------------------------------------------------------------------
 # Each entry describes what a hospital printed. Verdicts, risk signals and
-# citations are deliberately absent — they are produced by running the pipeline
+# citations are deliberately absent; they are produced by running the pipeline
 # over the rendered document.
 
 BILLS = [

@@ -11,7 +11,7 @@ export type Claim = {
  * The claim lifecycle, mirroring the `claim_status` enum in the database.
  *
  * Previously these were unconstrained strings on both sides, and the UI checked
- * for a 'COMPLETED' status the backend never wrote — so every finished claim
+ * for a 'COMPLETED' status the backend never wrote, so every finished claim
  * fell through to the default badge.
  */
 export const CLAIM_STATUSES = [
@@ -44,10 +44,16 @@ export function presentStatus(status: string): Presentation {
   return PRESENTATION[status as ClaimStatus] ?? { label: status, tone: 'attention' };
 }
 
+/**
+ * Chip styling per tone.
+ *
+ * Colour in this interface only ever means status, so these four palettes are
+ * the whole of the chroma budget, and nothing decorative may borrow them.
+ */
 export const TONE_CLASS: Record<Presentation['tone'], string> = {
-  progress: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
-  done: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-  attention: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+  progress: 'bg-review-soft text-review border-review-line',
+  done: 'bg-verified-soft text-verified border-verified-line',
+  attention: 'bg-rejected-soft text-rejected border-rejected-line',
 };
 
 /** Per-line adjudication outcomes, mirroring the `adjudication_status` enum. */
@@ -56,23 +62,23 @@ export type AdjudicationStatus = 'APPROVED' | 'CAPPED' | 'REJECTED' | 'NEEDS_REV
 export const ADJUDICATION: Record<AdjudicationStatus, { label: string; accent: string; chip: string }> = {
   APPROVED: {
     label: 'Approved',
-    accent: 'border-l-emerald-500',
-    chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+    accent: 'border-l-verified',
+    chip: 'bg-verified-soft text-verified border-verified-line',
   },
   CAPPED: {
     label: 'Capped',
-    accent: 'border-l-amber-500',
-    chip: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+    accent: 'border-l-capped',
+    chip: 'bg-capped-soft text-capped border-capped-line',
   },
   REJECTED: {
     label: 'Rejected',
-    accent: 'border-l-rose-500',
-    chip: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+    accent: 'border-l-rejected',
+    chip: 'bg-rejected-soft text-rejected border-rejected-line',
   },
   NEEDS_REVIEW: {
     label: 'Needs review',
-    accent: 'border-l-sky-500',
-    chip: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+    accent: 'border-l-review',
+    chip: 'bg-review-soft text-review border-review-line',
   },
 };
 

@@ -7,7 +7,7 @@ fails in two ways that matter for policy text:
     to a 384-dimensional average but are exact lexical matches.
   * **Ranking.** A bi-encoder scores query and passage independently. A
     cross-encoder reads them together and is far better at deciding which of
-    several plausible clauses actually answers the question — which is precisely
+    several plausible clauses actually answers the question, which is precisely
     the top-1 decision an adjudication rests on.
 
 So: retrieve widely from both sides, fuse, then spend the expensive model only
@@ -55,7 +55,7 @@ class Candidate:
     similarity: float = 0.0
 
     def provenance(self) -> dict:
-        """Why this passage surfaced — shown in evaluation and debugging."""
+        """Why this passage surfaced, shown in evaluation and debugging."""
         return {
             "dense_rank": self.dense_rank,
             "lexical_rank": self.lexical_rank,
@@ -77,7 +77,7 @@ class Candidate:
 def _load_reranker():
     """Load the cross-encoder once, on first use.
 
-    Returns None if it cannot be loaded — retrieval then falls back to fusion
+    Returns None if it cannot be loaded; retrieval then falls back to fusion
     order rather than failing. A degraded ranking is still a useful ranking.
     """
     global _reranker
@@ -134,8 +134,8 @@ async def _lexical_candidates(policy_id: str, query: str, depth: int) -> list[Ca
     """BM25-style ranking over the generated tsvector column.
 
     Terms are OR-ed, not AND-ed. `websearch_to_tsquery` builds a conjunction, so
-    "section 9.3" required both lexemes and therefore excluded clause 9.3 itself
-    — whose body never uses the word "section". This is candidate generation, not
+    "section 9.3" required both lexemes and therefore excluded clause 9.3 itself,
+    whose body never uses the word "section". This is candidate generation, not
     final ranking: recall matters here, and fusion plus the cross-encoder decide
     the order afterwards.
 
@@ -188,7 +188,7 @@ def fuse(dense: list[Candidate], lexical: list[Candidate]) -> list[Candidate]:
     """Reciprocal rank fusion.
 
     Combines by rank rather than score, because the two retrievers' scores are
-    not comparable — cosine similarity and ts_rank_cd live on different scales,
+    not comparable: cosine similarity and ts_rank_cd live on different scales,
     and normalising them would be inventing a relationship that does not exist.
     """
     merged: dict[str, Candidate] = {}
@@ -258,7 +258,7 @@ async def search_policy(
 
     if use_reranker:
         # Reranking is quadratic in nothing but linear in candidates, and each
-        # pair is a full transformer pass — so it runs on the shortlist only.
+        # pair is a full transformer pass, so it runs on the shortlist only.
         shortlist = fused[: max(top_k * 3, 10)]
         shortlist = await asyncio.to_thread(rerank, query, shortlist)
         return shortlist[:top_k]

@@ -7,10 +7,10 @@ what actually ships rather than a parallel implementation.
     docker compose run --rm fastapi python evaluation/run_retrieval_eval.py
 
 Reports, for each configuration:
-  recall@k     — share of questions whose correct clause appeared in the top k
-  precision@1  — share whose top result was correct
-  MRR          — mean reciprocal rank of the first correct result
-  latency      — median and p95 per query
+  recall@k     is the share of questions whose correct clause appeared in the top k
+  precision@1  is the share whose top result was correct
+  MRR          is the mean reciprocal rank of the first correct result
+  latency      is the median and p95 per query
 
 Recall@k is the ceiling on everything downstream: a clause that never surfaces
 cannot be cited, no matter how good the reasoning is.

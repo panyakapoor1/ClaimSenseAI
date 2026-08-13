@@ -34,7 +34,7 @@ MIN_TEXT_LAYER_CHARS = 40
 OCR_DPI = 300
 
 # Vertical gap, in points, that ends a passage. Roughly 1.5 blank lines at
-# typical body sizes — enough to separate blocks without splitting paragraphs.
+# typical body sizes, enough to separate blocks without splitting paragraphs.
 PARAGRAPH_GAP = 14.0
 
 MAX_CHUNK_CHARS = 1200

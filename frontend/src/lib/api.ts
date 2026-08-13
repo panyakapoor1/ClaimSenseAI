@@ -1,5 +1,5 @@
 // Server Components run inside the frontend container, where `localhost` is the
-// frontend itself — they must reach the API over the compose network.
+// frontend itself, so they must reach the API over the compose network.
 const SERVER_ORIGIN = process.env.API_URL_INTERNAL ?? 'http://fastapi:8000';
 
 // Client Components run in the browser, which reaches the API on the host port.

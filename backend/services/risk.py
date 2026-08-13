@@ -1,6 +1,6 @@
 """The risk engine.
 
-Every signal here is computed from data already in the claim — line items,
+Every signal here is computed from data already in the claim: line items,
 adjudication findings, extracted facts, the policy. Nothing is estimated and
 nothing is written by hand.
 
@@ -9,7 +9,7 @@ engine is: a stated policy about how much each observation matters, reviewable
 and arguable by the people who own the decision. They are declared in one table
 below and stamped onto every score, so a score can always be reproduced and a
 disagreement is about the policy rather than about a black box. When P11 trains a
-model, its output will sit alongside these — labelled as a model estimate — not
+model, its output will sit alongside these, labelled as a model estimate, not
 quietly replace them.
 
 What is genuinely computed:

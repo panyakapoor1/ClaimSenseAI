@@ -6,7 +6,7 @@ again. Evidence has to outlive the job that read it.
 
 S3-compatible so the same code addresses MinIO locally and a managed bucket
 later. Falls back to the local filesystem when no endpoint is configured, so the
-app still runs for anyone who has not started MinIO — the fallback announces
+app still runs for anyone who has not started MinIO; the fallback announces
 itself rather than failing silently.
 """
 

@@ -1,6 +1,6 @@
 """Demo tenant bootstrap.
 
-Creates one labelled demo organization and four users — one per role — so the
+Creates one labelled demo organization and four users, one per role, so the
 permission model can actually be exercised. These are real accounts with hashed
 passwords behind real authentication, not display-only labels.
 

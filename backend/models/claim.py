@@ -10,7 +10,7 @@ class Claimant(Base, TimestampMixin):
 
     Separate from `users`: the person whose treatment is billed is not the person
     operating the software, and conflating them made it impossible to ask "how
-    many claims has this patient filed?" — the basis of most frequency signals.
+    many claims has this patient filed?", the basis of most frequency signals.
     """
 
     __tablename__ = "claimants"

@@ -11,7 +11,7 @@ export const SESSION_COOKIE = 'claimsense_session';
  * Forward the browser's session cookie to the API as a bearer token.
  *
  * Server Components run inside the frontend container and call the API at
- * `http://fastapi:8000` — a different host from the one that set the cookie, so
+ * `http://fastapi:8000`, a different host from the one that set the cookie, so
  * the browser's cookie is never attached automatically. Reading it here and
  * sending it as `Authorization` is what carries the caller's identity across
  * that hop. Without this, every server-rendered page would be anonymous.

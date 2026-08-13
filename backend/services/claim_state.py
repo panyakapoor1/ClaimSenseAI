@@ -1,7 +1,7 @@
 """The claim state machine.
 
 The prototype moved claims between statuses by assigning to `claim.status`
-wherever it felt necessary, and coordinated concurrent jobs by polling — the
+wherever it felt necessary, and coordinated concurrent jobs by polling. The
 audit task slept in a 60×2s loop waiting for extraction to finish. That is a
 race condition with a timeout bolted on: it wastes two minutes on the happy
 path's worst case, silently gives up on the slow one, and encodes the ordering
@@ -9,7 +9,7 @@ rules nowhere.
 
 Transitions are declared here instead. A move that is not in the table is a bug
 and raises rather than quietly corrupting the claim's history, and every accepted
-move writes a timeline event — which is what finally makes `events` a real table
+move writes a timeline event, which is what finally makes `events` a real table
 rather than an empty one.
 """
 
@@ -107,7 +107,7 @@ async def transition(
 ) -> bool:
     """Move a claim to `target`, recording the move on its timeline.
 
-    Returns False when the claim is already in the target state — a retried job
+    Returns False when the claim is already in the target state; a retried job
     is not an error. Raises InvalidTransition for a move the table forbids.
     """
     current = claim.status

@@ -14,18 +14,25 @@ export type Risk = {
   signal_count: number;
 };
 
+/**
+ * The bands escalate rather than each taking their own hue: cleared, then two
+ * weights of caution, then a filled block for critical. A reader should be able
+ * to rank them without consulting a key.
+ */
 const BAND_STYLE: Record<string, string> = {
-  LOW: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/5',
-  MEDIUM: 'text-amber-300 border-amber-500/30 bg-amber-500/5',
-  HIGH: 'text-orange-300 border-orange-500/30 bg-orange-500/5',
-  CRITICAL: 'text-rose-300 border-rose-500/30 bg-rose-500/5',
+  LOW: 'border-verified-line bg-verified-soft text-verified',
+  MEDIUM: 'border-capped-line bg-capped-soft text-capped',
+  HIGH: 'border-rejected-line bg-rejected-soft text-rejected',
+  // text-paper rather than text-white: the fill flips with the theme, so the
+  // label has to flip with it or the filled band loses all contrast in dark.
+  CRITICAL: 'border-rejected bg-rejected text-paper',
 };
 
 /**
  * The risk score, decomposed into the rules that produced it.
  *
  * The score is never shown on its own. A number an analyst cannot interrogate
- * is a number they have to either accept or ignore, and both are bad — so every
+ * is a number they have to either accept or ignore, and both are bad, so every
  * contribution is listed with the observation behind it.
  */
 export default function RiskPanel({
@@ -37,9 +44,9 @@ export default function RiskPanel({
 }) {
   if (!risk) {
     return (
-      <section className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-white mb-2">Risk</h2>
-        <p className="text-sm text-slate-500">
+      <section className="panel p-6">
+        <p className="eyebrow">Risk</p>
+        <p className="mt-3 text-sm text-ink-500">
           Not scored yet. Risk is computed when the claim is adjudicated.
         </p>
       </section>
@@ -51,31 +58,34 @@ export default function RiskPanel({
   const band = BAND_STYLE[risk.band] ?? BAND_STYLE.MEDIUM;
 
   return (
-    <section className="glass-panel p-6">
-      <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
+    <section className="panel p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white mb-1">Risk</h2>
-          <p className="text-sm text-slate-500">
-            {risk.signal_count} {risk.signal_count === 1 ? 'rule' : 'rules'} fired on this claim
+          <p className="eyebrow">Risk</p>
+          <p className="mt-3 text-sm text-ink-500">
+            {risk.signal_count} {risk.signal_count === 1 ? 'rule' : 'rules'} fired on
+            this claim
           </p>
         </div>
 
-        <div className={`px-4 py-2 border ${band} flex items-baseline gap-2`}>
-          <span className="text-3xl font-bold tabular-nums">{risk.score.toFixed(0)}</span>
-          <span className="text-sm opacity-70">/ 100</span>
-          <span className="text-xs uppercase tracking-wider ml-2">{risk.band}</span>
+        <div className={`flex items-baseline gap-2 border px-4 py-2.5 ${band}`}>
+          <span className="font-mono text-3xl tabular-nums leading-none">
+            {risk.score.toFixed(0)}
+          </span>
+          <span className="font-mono text-xs opacity-70">/100</span>
+          <span className="ml-2 font-mono text-[0.625rem] uppercase tracking-[0.16em]">
+            {risk.band}
+          </span>
         </div>
       </div>
 
-      {/* A proportional bar per contribution, so relative weight is visible
-          without having to compare numbers by eye. */}
-      <div className="space-y-4">
+      <div className="mt-7 space-y-7">
         {aggravating.length > 0 && (
           <div>
-            <h3 className="text-xs uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5" /> Raises risk
-            </h3>
-            <ul className="space-y-3">
+            <p className="eyebrow flex items-center gap-2">
+              <TrendingUp className="h-3.5 w-3.5" /> Raises risk
+            </p>
+            <ul className="mt-4 space-y-4">
               {aggravating.map((signal) => (
                 <SignalRow key={signal.code} signal={signal} />
               ))}
@@ -84,11 +94,11 @@ export default function RiskPanel({
         )}
 
         {mitigating.length > 0 && (
-          <div className="pt-2">
-            <h3 className="text-xs uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
-              <TrendingDown className="w-3.5 h-3.5" /> Lowers risk
-            </h3>
-            <ul className="space-y-3">
+          <div>
+            <p className="eyebrow flex items-center gap-2">
+              <TrendingDown className="h-3.5 w-3.5" /> Lowers risk
+            </p>
+            <ul className="mt-4 space-y-4">
               {mitigating.map((signal) => (
                 <SignalRow key={signal.code} signal={signal} />
               ))}
@@ -97,15 +107,15 @@ export default function RiskPanel({
         )}
 
         {signals.length === 0 && (
-          <p className="text-sm text-slate-500 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <p className="flex items-center gap-2 text-sm text-ink-500">
+            <ShieldCheck className="h-4 w-4 text-verified" />
             No rules fired on this claim.
           </p>
         )}
       </div>
 
-      <p className="text-xs text-slate-600 mt-6 pt-4 border-t border-white/10">
-        Signals are computed from the claim's own data by a deterministic rules
+      <p className="mt-7 border-t border-line pt-4 text-xs leading-relaxed text-ink-500">
+        Signals are computed from the claim’s own data by a deterministic rules
         engine. The weights are a stated policy, not learned parameters.
       </p>
     </section>
@@ -120,8 +130,8 @@ function SignalRow({ signal }: { signal: RiskSignal }) {
   return (
     <li className="flex gap-4">
       <span
-        className={`w-12 shrink-0 text-sm font-semibold tabular-nums text-right ${
-          aggravating ? 'text-rose-300' : 'text-emerald-300'
+        className={`w-11 shrink-0 text-right font-mono text-sm tabular-nums ${
+          aggravating ? 'text-rejected' : 'text-verified'
         }`}
       >
         {signal.weight > 0 ? '+' : ''}
@@ -129,11 +139,13 @@ function SignalRow({ signal }: { signal: RiskSignal }) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-slate-200">{signal.title}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{signal.detail}</p>
-        <div className="h-0.5 bg-white/5 mt-2">
+        <p className="text-sm text-ink-900">{signal.title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{signal.detail}</p>
+        {/* A proportional bar per contribution, so relative weight is visible
+            without having to compare numbers by eye. */}
+        <div className="mt-2 h-1 bg-mist">
           <div
-            className={`h-full ${aggravating ? 'bg-rose-500/60' : 'bg-emerald-500/60'}`}
+            className={`h-full ${aggravating ? 'bg-rejected' : 'bg-verified'}`}
             style={{ width: `${width}%` }}
           />
         </div>

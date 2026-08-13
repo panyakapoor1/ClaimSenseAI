@@ -2,7 +2,7 @@
 
 The ORM declares `ClaimItem.audit_finding` as `uselist=False`, but nothing in the
 database enforced it. Re-auditing a claim therefore inserted a second finding for
-every line, and SQLAlchemy would silently return whichever one it loaded first —
+every line, and SQLAlchemy would silently return whichever one it loaded first,
 so a claim could hold two contradictory verdicts and display them at random.
 
 The unique constraint makes duplicate verdicts impossible rather than merely

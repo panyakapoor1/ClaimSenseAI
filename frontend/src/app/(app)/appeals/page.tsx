@@ -1,20 +1,22 @@
 import Link from 'next/link';
 import { FileText, ArrowRight } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 import { API_V1_SERVER } from '@/lib/api';
 import { authHeaders } from '@/lib/session';
+import { formatCurrency, type Claim } from '@/lib/claimStatus';
 
 export const dynamic = 'force-dynamic';
 
-async function getClaims() {
+async function getClaims(): Promise<Claim[]> {
   try {
     const res = await fetch(`${API_V1_SERVER}/claims?limit=100`, {
       headers: await authHeaders(),
       cache: 'no-store',
     });
-    if (!res.ok) throw new Error('Failed to fetch claims');
+    if (!res.ok) throw new Error(`API responded ${res.status}`);
     return (await res.json()).items;
   } catch (err) {
-    console.error(err);
+    console.error('Could not load claims:', err);
     return [];
   }
 }
@@ -22,60 +24,61 @@ async function getClaims() {
 export default async function AppealsListPage() {
   const claims = await getClaims();
 
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="mb-10">
-        <h1 className="text-4xl font-bold tracking-tight text-white mb-2">
-          Generated Appeals
-        </h1>
-        <p className="text-slate-400 text-lg">
-          Select a claim to view its associated appeal documents.
-        </p>
-      </header>
+  // Only claims that actually have a letter. The previous version listed every
+  // claim as though each had an appeal, so most rows led to an empty page.
+  const drafted = claims.filter((claim) => claim.status === 'APPEAL_GENERATED');
 
-      {claims.length === 0 ? (
-        <div className="glass-panel p-12 text-center flex flex-col items-center">
-          <FileText className="w-16 h-16 text-slate-600 mb-4" />
-          <h2 className="text-xl font-medium text-slate-300 mb-2">No claims found</h2>
-          <p className="text-slate-500 max-w-md">
-            You don't have any claims yet.
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Correspondence"
+        title="Appeals"
+        description="Letters drafted against the clause used to reject each disputed charge."
+      />
+
+      {drafted.length === 0 ? (
+        <div className="stamp-in mt-10 flex flex-col items-center border border-dashed border-line-strong px-6 py-20 text-center">
+          <FileText className="h-8 w-8 text-ink-300" strokeWidth={1.4} />
+          <h2 className="mt-5 text-lg font-semibold text-ink-900">
+            No appeals drafted yet
+          </h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-700">
+            An appeal is drafted from a claim that has disputed lines. Open an
+            audited claim and draft one from there.
           </p>
+          <Link href="/claims" className="btn mt-7">
+            Go to audit results
+          </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {claims.map((claim: any) => (
-            <Link key={claim.id} href={`/appeals/${claim.id}`}>
-              <div className="glass-panel p-6 border-slate-700/50 hover:border-indigo-500/50 hover:bg-slate-800/80 transition-all cursor-pointer group h-full flex flex-col">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center">
-                    <FileText className="w-3 h-3 mr-1.5" />
-                    Appeal Doc
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-slate-600 group-hover:text-indigo-400 transition-all group-hover:translate-x-1" />
-                </div>
-                
-                <h3 className="text-lg font-medium text-white mb-1 truncate">
-                  Appeal for Claim #{claim.id.substring(0, 8)}...
-                </h3>
-                
-                <div className="mt-auto pt-4 flex justify-between items-end">
-                  <div>
-                    <p className="text-slate-500 text-xs mb-1">Claim Status</p>
-                    <p className="text-sm font-semibold text-slate-200">
-                      {claim.status}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-slate-500 text-xs mb-1">Date</p>
-                    <p className="text-slate-400 text-sm">
-                      {new Date(claim.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
+        <section className="stamp-in mt-10">
+          <div className="hidden grid-cols-[1fr_9rem_7rem_1.5rem] gap-4 border-b border-line pb-3 md:grid">
+            <span className="eyebrow">Claim</span>
+            <span className="eyebrow text-right">Total billed</span>
+            <span className="eyebrow text-right">Received</span>
+            <span />
+          </div>
+
+          {drafted.map((claim) => (
+            <Link
+              key={claim.id}
+              href={`/appeals/${claim.id}`}
+              className="group grid grid-cols-1 gap-2 border-b border-line px-1 py-4 transition-colors hover:bg-mist md:grid-cols-[1fr_9rem_7rem_1.5rem] md:items-center md:gap-4"
+            >
+              <span className="font-mono text-sm text-ink-900">{claim.reference}</span>
+
+              <span className="font-mono text-sm tabular-nums text-ink-900 md:text-right">
+                {formatCurrency(claim.total_billed, claim.currency)}
+              </span>
+
+              <span className="font-mono text-sm tabular-nums text-ink-500 md:text-right">
+                {new Date(claim.created_at).toLocaleDateString()}
+              </span>
+
+              <ArrowRight className="hidden h-4 w-4 text-ink-300 transition-all group-hover:translate-x-0.5 group-hover:text-ink-900 md:block" />
             </Link>
           ))}
-        </div>
+        </section>
       )}
     </div>
   );

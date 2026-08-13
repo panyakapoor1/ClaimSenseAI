@@ -25,7 +25,7 @@ def _load_secret() -> str:
     """The signing key, from the environment.
 
     A generated fallback is used only when nothing is configured, and it changes
-    on every restart — so tokens stop validating and the problem surfaces
+    on every restart, so tokens stop validating and the problem surfaces
     immediately rather than shipping a known default key to production.
     """
     configured = os.getenv("JWT_SECRET", "").strip()

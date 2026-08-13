@@ -2,7 +2,7 @@
 
 The point of this module is that a person's decision is recorded *alongside* what
 the AI had said, not on top of it. The model's verdict is never edited or
-deleted — an override adds a row saying a named person disagreed, and why.
+deleted; an override adds a row saying a named person disagreed, and why.
 
 Three things fall out of that:
 
@@ -83,7 +83,7 @@ async def record_decision(
     """Record a decision and apply whatever it changes.
 
     Returns the persisted HumanDecision. Raises rather than silently ignoring a
-    request that does not make sense — deciding on a claim that was never
+    request that does not make sense, such as deciding on a claim that was never
     adjudicated, or overriding without saying why.
     """
     reason = (reason or "").strip()
@@ -122,8 +122,8 @@ async def record_decision(
                 raise ConflictError(
                     "This line item has no AI verdict yet, so there is nothing to override."
                 )
-            # The AI's verdict is replaced on the finding — the claim has one
-            # current answer per line — but the previous value is preserved on
+            # The AI's verdict is replaced on the finding (the claim has one
+            # current answer per line) but the previous value is preserved on
             # the decision row below, so nothing is lost.
             finding.status = target
             item.allowed_amount = (
